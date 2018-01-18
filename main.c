@@ -18,7 +18,6 @@
 #define ENEMY_W 81
 #define HITAREA_X 13
 #define HITAREA_W 68
-#define HITAREA_H 90
 #define MAX_DEGREES 80
 #define STRAIGHT_ANGLE 180
 #define PI 3.14159265
@@ -157,25 +156,65 @@ void drawCharacter(OBJECT *hero, int *characterFrame, int characterTime, int *ga
   }
 }
 
-void drawBlock(ENEMY *block) {
+void drawEnemy(ENEMY *block) {
   SDL_Rect frame = (SDL_Rect){block->frame * ENEMY_W, 0, ENEMY_W, ENEMY_H};
   SDL_Rect dstBlock = (SDL_Rect){block->posX + HITAREA_W - HITAREA_X, block->posY, ENEMY_W, ENEMY_H};
   SDL_Rect txtDstRect = {block->posX + block->txtDstRect.x, block->txtDstRect.y,
                          block->txtDstRect.w, block->txtDstRect.h};
 
   if (!gPausedGame) {
-    if (block->time % 30 == 0) {
-      if (block->time < 0) {
-        SDL_SetTextureAlphaMod(block->sprite, block->time * -3);
-      } else {
-        block->frame = block->frame == 1 ? 0 : 1;
+    if (block->time > -400 && block->time < -100) {
+      /*printf("time %d %d %d\n", block->time, dstBlock.h, dstBlock.y);
+      dstBlock.y = dstBlock.y - WINDOW_HEIGHT + ENEMY_H;
+      frame.x = 0;
+      frame.h = WINDOW_HEIGHT * 2 - ENEMY_H * 2;
+      dstBlock.h = WINDOW_HEIGHT * 2 - ENEMY_H * 2;
+      printf("time %d %d %d\n", block->time, dstBlock.h, dstBlock.y);*/
+    }
+    
+    if (block->frame > 1) {
+      if(block->time == -480 || block->time == -320 || block->time == -80) {
+        SDL_SetTextureAlphaMod(block->sprite, 200);
+        if(block->frame == 3) {
+          block->posY -= 3;
+        }
+      }
+      else if(block->time == -460 || block->time == -340 || block->time == -60) {
+        SDL_SetTextureAlphaMod(block->sprite, 150);
+        if(block->frame == 3) {
+          block->posY -= 3;
+        }
+      }
+      else if(block->time == -440 || block->time == -360 || block->time == -40) {
+        SDL_SetTextureAlphaMod(block->sprite, 100);
+        if(block->frame == 3) {
+          block->posY -= 3;
+        }
+      }
+      else if(block->time == -420 || block->time == -380 ||  block->time == -20) {
+        SDL_SetTextureAlphaMod(block->sprite, 50);
+        if(block->frame == 3) {
+          block->posY -= 3;
+        }
+      }
+      else if(block->time == -300) {
+        SDL_SetTextureAlphaMod(block->sprite, 255);
+        if(block->frame == 3) {
+          block->posY -= 3;
+        }
       }
     }
+    else if (block->time % 30 == 0) {
+      block->frame = block->frame == 1 ? 0 : 1;
+    }
 
-    block->time++;
+    block->time ++;
   }
   SDL_RenderCopy(gRenderer, block->sprite, &frame, &dstBlock);
-  SDL_RenderCopy(gRenderer, block->textTexture, NULL, &txtDstRect);
+  if (block->frame != 3) {
+    SDL_RenderCopy(gRenderer, block->textTexture, NULL, &txtDstRect);
+  }
+  
 }
 
 void setTextTexture(TEXT_TEXTURE *txtText, TTF_Font *font, char *text) {
@@ -219,13 +258,31 @@ void setZombieTextTexture(ENEMY *block) {
   SDL_FreeSurface(textSurface);
 }
 
-void damage(ENEMY *b, int *quantBlocks) {
+void reflectX(OBJECT *ball) {
+  ball->stepX *= -1;
+  ball->posX += ball->stepX;
+}
+
+void reflectY(OBJECT *ball) {
+  ball->stepY *= -1;
+  ball->posY += ball->stepY;
+}
+
+void damage(ENEMY blocks[][COLUMNS], int row, int column) {
+  int j;
+  int allDead = 1;
+  ENEMY* b = &blocks[row][column];
   b->resistance--;
   setZombieTextTexture(b);
-
+  
   if (b->resistance == 0) {
-    b->time = -89;
-    (*quantBlocks)--;
+    for (j = 0; j < COLUMNS; j++) {
+      if(blocks[row][j].resistance > 0) {
+        allDead = 0;
+      }
+    }
+    printf("dead %d\n", allDead);
+    b->time = allDead ? -500 : -100;
     if (gSoundCondition) Mix_PlayChannel(-1, gDestroyBlockSound, 0);
   } else {
     b->time = 1;
@@ -237,23 +294,13 @@ void damage(ENEMY *b, int *quantBlocks) {
   updatePoints(1);
 }
 
-void reflectX(OBJECT *ball) {
-  ball->stepX *= -1;
-  ball->posX += ball->stepX;
-}
-
-void reflectY(OBJECT *ball) {
-  ball->stepY *= -1;
-  ball->posY += ball->stepY;
-}
-
 void collide(ENEMY blocks[][COLUMNS], OBJECT *ball, int *quantBlocks) {
   int movingRight = ball->stepX > 0;
   int movingBottom = ball->stepY >= 0;
   int left = ball->posX / HITAREA_W - 1;
   int right = (ball->posX + BULLET_SIDE) / HITAREA_W - 1;
-  int top = ball->posY / HITAREA_H;
-  int bottom = (ball->posY + BULLET_SIDE) / HITAREA_H;
+  int top = ball->posY / ENEMY_H;
+  int bottom = (ball->posY + BULLET_SIDE) / ENEMY_H;
 
   if (COLUMNS == bottom) {
     bottom = top;
@@ -275,7 +322,7 @@ void collide(ENEMY blocks[][COLUMNS], OBJECT *ball, int *quantBlocks) {
       x1 = right;
     }
     if (blocks[x1][top].resistance) {
-      damage(&blocks[x1][top], quantBlocks);
+      damage(blocks, x1, top);
       reflectX(ball);
     }
   } else if (left == right) {
@@ -283,7 +330,7 @@ void collide(ENEMY blocks[][COLUMNS], OBJECT *ball, int *quantBlocks) {
       y1 = bottom;
     }
     if (blocks[left][y1].resistance) {
-      damage(&blocks[left][y1], quantBlocks);
+      damage(blocks, left, y1);
       reflectY(ball);
     }
   } else if (top != bottom && left != right) {
@@ -296,7 +343,7 @@ void collide(ENEMY blocks[][COLUMNS], OBJECT *ball, int *quantBlocks) {
       y2 = top;
     }
     if (blocks[x1][y1].resistance) {
-      damage(&blocks[x1][y1], quantBlocks);
+      damage(blocks, x1, y1);
       if (blocks[x2][y1].resistance == 0 && blocks[x1][y2].resistance == 0) {
         reflectX(ball);
         reflectY(ball);
@@ -304,11 +351,11 @@ void collide(ENEMY blocks[][COLUMNS], OBJECT *ball, int *quantBlocks) {
       }
     }
     if (blocks[x2][y1].resistance) {
-      damage(&blocks[x2][y1], quantBlocks);
+      damage(blocks, x2, y1);
       reflectY(ball);
     }
     if (blocks[x1][y2].resistance) {
-      damage(&blocks[x1][y2], quantBlocks);
+      damage(blocks, x1, y2);
       reflectX(ball);
     }
   }
@@ -340,7 +387,7 @@ void drawSprite(int x, int y, int armsSpriteY, int eyesSpriteX, int mouthSpriteX
   SDL_RenderCopy(gRenderer, zombieHair, &srcRect, &dstRect);
 }
 
-ENEMY createENEMY(int posX, int posY, int level) {
+ENEMY createEnemy(int posX, int posY, int level) {
   int hairSpriteY = ENEMY_H * (rand() % 5);
   int hairColour = rand() % 7;
   int hairSpriteX = ENEMY_W * hairColour;
@@ -349,6 +396,8 @@ ENEMY createENEMY(int posX, int posY, int level) {
   int eyesSpriteX = ENEMY_W * (rand() % 4);
   int blinkSpriteX = ENEMY_W * 4;
   int mouthSpriteX = ENEMY_W * (rand() % 6);
+
+  SDL_Rect bulletRect = {ENEMY_W * 3 + HITAREA_X, ENEMY_H / 2 + 4 + BULLET_SIDE, BULLET_SIDE, BULLET_SIDE};
   int armsSpriteX = 2;
   ENEMY block = {1, 0, posX, posY, level + (rand() % 4) * 10 * (level / 10)};
 
@@ -357,7 +406,7 @@ ENEMY createENEMY(int posX, int posY, int level) {
 
   block.sprite =
       SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_ARGB8888,
-                        SDL_TEXTUREACCESS_TARGET, ENEMY_W * 3, ENEMY_H);
+                        SDL_TEXTUREACCESS_TARGET, ENEMY_W * 4, ENEMY_H);
   SDL_SetRenderTarget(gRenderer, block.sprite);
 
   // will make pixels with alpha 0 fully transparent
@@ -370,11 +419,20 @@ ENEMY createENEMY(int posX, int posY, int level) {
              hairSpriteY, browsSpriteX, pantsSpriteX);
   drawSprite(ENEMY_W * 2, 3, 0, blinkSpriteX, mouthSpriteX, hairSpriteX,
              hairSpriteY, browsSpriteX, pantsSpriteX);
+
+  //SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 100);
+  SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
+  SDL_RenderFillRect(gRenderer, &bulletRect);
+  setTextTexture(&txtText3, font20, "+1");
+  txtText3.txtDstRect.x = ENEMY_W * 3 + BULLET_SIDE * 3;
+  txtText3.txtDstRect.y = ENEMY_H / 2 + BULLET_SIDE;
+  SDL_RenderCopy(gRenderer, txtText3.txtText, NULL, &txtText3.txtDstRect);
+
   SDL_SetRenderTarget(gRenderer, NULL);
   return block;
 }
 
-int moveOBJECT(OBJECT *p) {
+int moveObject(OBJECT *p) {
   if (p->posX < 0) {
     p->stepX = 0;
     p->stepY = 0;
@@ -533,6 +591,32 @@ SDL_Texture *createEmptySprite() {
   // will make pixels with alpha 0 fully transparent
   // use SDL_SetTextureBlendMode . Not SDL_SetRenderDrawBlendMode
   SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+  return texture;
+}
+
+SDL_Texture *createExtraBulletSprite() {
+  SDL_Rect bulletRect = {0, WINDOW_HEIGHT - ENEMY_H / 2, BULLET_SIDE, BULLET_SIDE};
+  SDL_Texture *texture =
+      SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_RGBA8888,
+                        SDL_TEXTUREACCESS_TARGET, ENEMY_W, WINDOW_HEIGHT * 2 - ENEMY_H * 2);
+  SDL_SetRenderTarget(gRenderer, texture);
+
+  // will make pixels with alpha 0 fully transparent
+  // use SDL_SetTextureBlendMode . Not SDL_SetRenderDrawBlendMode
+  SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+
+  SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
+  SDL_RenderDrawLine(gRenderer, 0, 0, 0, WINDOW_HEIGHT - ENEMY_H);
+  SDL_RenderDrawLine(gRenderer, 0, WINDOW_HEIGHT, 0, WINDOW_HEIGHT * 2 - ENEMY_H * 2);
+  SDL_RenderFillRect(gRenderer, &bulletRect);
+  printf("AAAAAAA\n");
+  setTextTexture(&txtText3, font20, "+1");
+  txtText3.txtDstRect.x = ENEMY_W / 2 + BULLET_SIDE * 2;
+  txtText3.txtDstRect.y = WINDOW_HEIGHT - ENEMY_H / 2;
+  SDL_RenderCopy(gRenderer, txtText3.txtText, NULL, &txtText3.txtDstRect);
+
+  SDL_SetRenderTarget(gRenderer, NULL);
+
   return texture;
 }
 
@@ -858,7 +942,7 @@ int stageOne() {
   int level = 1;
   int bulletsLoaded = 1;
   int killedInColumn = 0;
-  int killedAtLeastOne = 0;
+  int lastKilled = 0;
 
   int bulletsInTheMagazine = 0;
   int shotInterval = 0;
@@ -881,7 +965,7 @@ int stageOne() {
   }
   for (j = 0; j < COLUMNS; j++) {
     if (rand() % 3 == 0) {
-      block[ROWS - 1][j] = createENEMY(HITAREA_W * ROWS, HITAREA_H * j, level);
+      block[ROWS - 1][j] = createEnemy(HITAREA_W * ROWS, ENEMY_H * j, level);
       quantBlocks++;
     } else {
       block[i][j] = (ENEMY){0};
@@ -932,17 +1016,25 @@ int stageOne() {
     }
 
     SDL_RenderClear(gRenderer);
-    SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 100);
+    SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 0);
     SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg1);
     SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg2);
     for (j = 0; j < COLUMNS; j++) {
       for (i = 0; i < ROWS; i++) {
         if (block[i][j].time) {
-          drawBlock(&block[i][j]);
-        } else if (block[i][j].time == -1) {
-          SDL_DestroyTexture(block[i][j].textTexture);
-          SDL_DestroyTexture(block[i][j].sprite);
-          block[i][j] = (ENEMY){0};
+          drawEnemy(&block[i][j]);
+        }
+        if (block[i][j].time == -400) {
+          block[i][j].frame = 3;
+          //SDL_DestroyTexture(block[i][j].textTexture);
+          //SDL_DestroyTexture(block[i][j].sprite);
+          //block[i][j].sprite = createExtraBulletSprite();
+        }
+        if (block[i][j].time == -1) {
+          //block[i][j].time = 0;
+          //SDL_DestroyTexture(block[i][j].textTexture);
+          //SDL_DestroyTexture(block[i][j].sprite);
+          //block[i][j] = (ENEMY){0};
         }
       }
     }
@@ -958,8 +1050,7 @@ int stageOne() {
             // the coordinates of Y in world coordinates
             handPvtPntY = handDstRect.y + handDstRect.h / 2;
             aimPnt = getRulerCorners(handDstRect.x, handPvtPntY, handDstRect.w / 2, -2);
-            SDL_RenderDrawLine(gRenderer, aimPnt.x, aimPnt.y, e.motion.x,
-                               e.motion.y);
+            SDL_RenderDrawLine(gRenderer, aimPnt.x, aimPnt.y, e.motion.x, e.motion.y);
             SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
 
             if (isMouseDown == 0) {
@@ -985,7 +1076,7 @@ int stageOne() {
 
         if (gameFrame > 2) {
           for (ii = 0; ii < bulletsLoaded; ii++) {
-            bulletsInTheMagazine += moveOBJECT(&balls[ii]);
+            bulletsInTheMagazine += moveObject(&balls[ii]);
             if (balls[ii].posX > 0) {
               collide(block, &balls[ii], &quantBlocks);
               bulletRect.x = balls[ii].posX;
@@ -1011,21 +1102,21 @@ int stageOne() {
                 for (j = 0; j < COLUMNS; j++) {
                   if (block[i][j].resistance == 0) {
                     killedInColumn++;
-                    if (block[i][j].posX > 0) {
-                      block[i][j].posX = 0;
-                      killedAtLeastOne = 1;
+                    if (block[i][j].lifeLabel[0]) {
+                      block[i][j].lifeLabel[0] = 0;
+                      printf("frame %d %d %d\n", i, j, block[i][j].frame);
+                      //block[i][j].posX = 0;
+                      lastKilled = 1;
                     }
                   }
                   block[i - 1][j] = block[i][j];
                 }
-                if (killedAtLeastOne && killedInColumn == COLUMNS) {
+                if (lastKilled && killedInColumn == COLUMNS) {
+                  printf("lastKilled %d %d\n", lastKilled, bulletsLoaded);
                   bulletsLoaded++;
                 }
                 killedInColumn = 0;
-                killedAtLeastOne = 0;
-              }
-              if (quantBlocks == 0) {
-                updatePoints(10);
+                lastKilled = 0;
               }
               level++;
               for (j = 0; j < COLUMNS; j++) {
@@ -1035,7 +1126,7 @@ int stageOne() {
               for (j = 0; j < enemyInColumn; j++) {
                 hitAreaY = rand() % 6;
                 block[i - 1][hitAreaY] =
-                    createENEMY(HITAREA_W * i, HITAREA_H * hitAreaY, level);
+                    createEnemy(HITAREA_W * i, ENEMY_H * hitAreaY, level);
                 quantBlocks++;
               }
             }
@@ -1044,7 +1135,6 @@ int stageOne() {
         }
       } else if (gameFrame < -1) {
         gameFrame++;
-        // printf("AAA %d", gameFrame);
         if (gameFrame < -600) {
           dstBg1.x += 2;
           dstBg2.x += 2;
@@ -1092,11 +1182,11 @@ int stageOne() {
       } else if (gameFrame == -1) {
         updateBullets(bulletsLoaded);
         gameFrame++;
-        for (i = 0; i < ROWS; i++) {
+        /*for (i = 0; i < ROWS; i++) {
           for (j = 0; j < COLUMNS; j++) {
             block[i][j].frame = 0;
           }
-        }
+        }*/
       }
     }
 
