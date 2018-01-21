@@ -10,7 +10,7 @@
 #define ROWS 13
 #define COLUMNS 6
 #define BULLET_SIDE 10
-#define BULLET_GAP 15
+#define BULLET_GAP 28
 #define BG_W 1170
 #define HAND_W 70
 #define HAND_H 34
@@ -109,9 +109,11 @@ SDL_Texture *stageBackground;
 /* bar's surface */
 SDL_Texture *heroText;
 /*sounds */
-Mix_Chunk *gCollisionBlockSound = NULL;
-Mix_Chunk *gDestroyBlockSound = NULL;
-Mix_Music *gStageOneMusic = NULL;
+Mix_Chunk *hitSound;
+Mix_Chunk *destroySound;
+Mix_Chunk *extraSound;
+Mix_Chunk *laserSound;
+Mix_Music *gameMusic;
 /* fonts */
 TTF_Font *font20;
 TTF_Font *font42;
@@ -156,52 +158,34 @@ void drawCharacter(OBJECT *hero, int *characterFrame, int characterTime, int *ga
   }
 }
 
+void animateEnemyEnd(ENEMY *block, int alpha) {
+  SDL_SetTextureAlphaMod(block->sprite, alpha);
+  if(block->frame == 3) {
+    block->posY -= 3;
+  }
+}
+
 void drawEnemy(ENEMY *block) {
   SDL_Rect frame = (SDL_Rect){block->frame * ENEMY_W, 0, ENEMY_W, ENEMY_H};
   SDL_Rect dstBlock = (SDL_Rect){block->posX + HITAREA_W - HITAREA_X, block->posY, ENEMY_W, ENEMY_H};
-  SDL_Rect txtDstRect = {block->posX + block->txtDstRect.x, block->txtDstRect.y,
-                         block->txtDstRect.w, block->txtDstRect.h};
+  SDL_Rect txtDstRect = {block->posX + block->txtDstRect.x, block->txtDstRect.y, block->txtDstRect.w, block->txtDstRect.h};
 
-  if (!gPausedGame) {
-    if (block->time > -400 && block->time < -100) {
-      /*printf("time %d %d %d\n", block->time, dstBlock.h, dstBlock.y);
-      dstBlock.y = dstBlock.y - WINDOW_HEIGHT + ENEMY_H;
-      frame.x = 0;
-      frame.h = WINDOW_HEIGHT * 2 - ENEMY_H * 2;
-      dstBlock.h = WINDOW_HEIGHT * 2 - ENEMY_H * 2;
-      printf("time %d %d %d\n", block->time, dstBlock.h, dstBlock.y);*/
-    }
-    
-    if (block->frame > 1) {
+  if (!gPausedGame) {    
+    if (block->frame > 1 && block->time < 0) {
       if(block->time == -480 || block->time == -320 || block->time == -80) {
-        SDL_SetTextureAlphaMod(block->sprite, 200);
-        if(block->frame == 3) {
-          block->posY -= 3;
-        }
+        animateEnemyEnd(block, 200);
       }
       else if(block->time == -460 || block->time == -340 || block->time == -60) {
-        SDL_SetTextureAlphaMod(block->sprite, 150);
-        if(block->frame == 3) {
-          block->posY -= 3;
-        }
+        animateEnemyEnd(block, 150);
       }
       else if(block->time == -440 || block->time == -360 || block->time == -40) {
-        SDL_SetTextureAlphaMod(block->sprite, 100);
-        if(block->frame == 3) {
-          block->posY -= 3;
-        }
+        animateEnemyEnd(block, 100);
       }
       else if(block->time == -420 || block->time == -380 ||  block->time == -20) {
-        SDL_SetTextureAlphaMod(block->sprite, 50);
-        if(block->frame == 3) {
-          block->posY -= 3;
-        }
+        animateEnemyEnd(block, 50);
       }
       else if(block->time == -300) {
-        SDL_SetTextureAlphaMod(block->sprite, 255);
-        if(block->frame == 3) {
-          block->posY -= 3;
-        }
+        animateEnemyEnd(block, 255);
       }
     }
     else if (block->time % 30 == 0) {
@@ -268,6 +252,12 @@ void reflectY(OBJECT *ball) {
   ball->posY += ball->stepY;
 }
 
+void playSound(Mix_Chunk* sound) {
+  if(gSoundCondition) {
+    Mix_PlayChannel(-1, sound, 0);
+  }
+}
+
 void damage(ENEMY blocks[][COLUMNS], int row, int column) {
   int j;
   int allDead = 1;
@@ -281,14 +271,12 @@ void damage(ENEMY blocks[][COLUMNS], int row, int column) {
         allDead = 0;
       }
     }
-    printf("dead %d\n", allDead);
     b->time = allDead ? -500 : -100;
-    if (gSoundCondition) Mix_PlayChannel(-1, gDestroyBlockSound, 0);
-  } else {
+    playSound(destroySound);
+  }
+  else {
     b->time = 1;
-    if (gSoundCondition) {
-      Mix_PlayChannel(-1, gCollisionBlockSound, 0);
-    }
+    playSound(hitSound);
   }
   b->frame = 2;
   updatePoints(1);
@@ -397,7 +385,7 @@ ENEMY createEnemy(int posX, int posY, int level) {
   int blinkSpriteX = ENEMY_W * 4;
   int mouthSpriteX = ENEMY_W * (rand() % 6);
 
-  SDL_Rect bulletRect = {ENEMY_W * 3 + HITAREA_X, ENEMY_H / 2 + 4 + BULLET_SIDE, BULLET_SIDE, BULLET_SIDE};
+  SDL_Rect bulletRect = {ENEMY_W * 3 + HITAREA_X + BULLET_SIDE, ENEMY_H / 2 + 4 + BULLET_SIDE, BULLET_SIDE, BULLET_SIDE};
   int armsSpriteX = 2;
   ENEMY block = {1, 0, posX, posY, level + (rand() % 4) * 10 * (level / 10)};
 
@@ -420,11 +408,10 @@ ENEMY createEnemy(int posX, int posY, int level) {
   drawSprite(ENEMY_W * 2, 3, 0, blinkSpriteX, mouthSpriteX, hairSpriteX,
              hairSpriteY, browsSpriteX, pantsSpriteX);
 
-  //SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 100);
-  SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
+  /**/SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 255);
   SDL_RenderFillRect(gRenderer, &bulletRect);
   setTextTexture(&txtText3, font20, "+1");
-  txtText3.txtDstRect.x = ENEMY_W * 3 + BULLET_SIDE * 3;
+  txtText3.txtDstRect.x = ENEMY_W * 3 + BULLET_SIDE * 4;
   txtText3.txtDstRect.y = ENEMY_H / 2 + BULLET_SIDE;
   SDL_RenderCopy(gRenderer, txtText3.txtText, NULL, &txtText3.txtDstRect);
 
@@ -543,9 +530,7 @@ SDL_Texture *loadTexture(char *path) {
   return newTexture;
 }
 
-int loadMedia() {
-  /*Loading success flag*/
-  int success = 1;
+void loadMedia() {
   /* Load menu surface */
   mainMenu = loadTexture("images/menu-11-menu.png");
   gameTitle = loadTexture("images/menu-11-title.png");
@@ -570,16 +555,11 @@ int loadMedia() {
   zombieMouth = loadTexture("images/zombie-mouth-2.png");
 
   /*load sounds */
-  gCollisionBlockSound = Mix_LoadWAV("sounds/collisionBlock.wav");
-  gDestroyBlockSound = Mix_LoadWAV("sounds/destroyBlock.wav");
-  gStageOneMusic = Mix_LoadMUS("sounds/stageOneMusic.mp3");
-
-  if (!gCollisionBlockSound || !gDestroyBlockSound || !gStageOneMusic) {
-    printf("Failed to load sounds! SDL Error: %s\n", SDL_GetError());
-    success = 0;
-  }
-
-  return success;
+  hitSound = Mix_LoadWAV("sounds/hit.wav");
+  destroySound = Mix_LoadWAV("sounds/destroy.wav");
+  laserSound = Mix_LoadWAV("sounds/laser.wav");
+  extraSound = Mix_LoadWAV("sounds/extra.wav");
+  gameMusic = Mix_LoadMUS("sounds/music.mp3");
 }
 
 SDL_Texture *createEmptySprite() {
@@ -767,9 +747,9 @@ void closing() {
   gWindow = NULL;
 
   /*Free sounds */
-  Mix_FreeChunk(gCollisionBlockSound);
-  Mix_FreeChunk(gDestroyBlockSound);
-  Mix_FreeMusic(gStageOneMusic);
+  Mix_FreeChunk(hitSound);
+  Mix_FreeChunk(destroySound);
+  Mix_FreeMusic(gameMusic);
 
   // Close the font that was used
   TTF_CloseFont(font20);
@@ -813,7 +793,7 @@ void playMusic() {
     if (Mix_PausedMusic()) {
       Mix_ResumeMusic();
     } else {
-      Mix_PlayMusic(gStageOneMusic, -1);
+      Mix_PlayMusic(gameMusic, -1);
     }
   }
 }
@@ -911,7 +891,7 @@ SDL_Point getRulerCorners(int pvtX, int pvtY, int ox, int oy) {
   return pnt;
 }
 
-int stageOne() {
+int start() {
   OBJECT *ball;
   OBJECT hero = {-HITAREA_W - 45, WINDOW_HEIGHT / 2 - BAR_HEIGHT / 2, 0, 0};
   SDL_Point aimPnt;
@@ -971,6 +951,10 @@ int stageOne() {
       block[i][j] = (ENEMY){0};
     }
   }
+  if(quantBlocks == 0) {
+    block[rand() % 6][j] = createEnemy(HITAREA_W * ROWS, ENEMY_H * j, level);
+      quantBlocks++;
+  }
 
   /* Starts game main loop */
   while (!gQuit) {
@@ -1026,15 +1010,12 @@ int stageOne() {
         }
         if (block[i][j].time == -400) {
           block[i][j].frame = 3;
-          //SDL_DestroyTexture(block[i][j].textTexture);
-          //SDL_DestroyTexture(block[i][j].sprite);
-          //block[i][j].sprite = createExtraBulletSprite();
+          playSound(extraSound);
         }
-        if (block[i][j].time == -1) {
-          //block[i][j].time = 0;
-          //SDL_DestroyTexture(block[i][j].textTexture);
-          //SDL_DestroyTexture(block[i][j].sprite);
-          //block[i][j] = (ENEMY){0};
+        else if (block[i][j].time == -1) {
+          SDL_DestroyTexture(block[i][j].textTexture);
+          SDL_DestroyTexture(block[i][j].sprite);
+          block[i][j] = (ENEMY){0};
         }
       }
     }
@@ -1061,15 +1042,13 @@ int stageOne() {
         } else if (gameFrame < shotInterval) {
           if (gameFrame % BULLET_GAP == 0) {
             ball = &balls[gameFrame / BULLET_GAP - 1];
-            // printf("posX %f %d %d\n", ball->posX, bulletsLoaded, gameFrame /
-            // BULLET_GAP);
-            aimPnt =
-                getRulerCorners(handDstRect.x, handPvtPntY, handDstRect.w, -12);
+            aimPnt = getRulerCorners(handDstRect.x, handPvtPntY, handDstRect.w, -12);
             ball->posY = aimPnt.y;
             ball->posX = aimPnt.x;
             ball->stepY = ballY;
             ball->stepX = ballX;
             updateBullets(bulletsLoaded - gameFrame / BULLET_GAP);
+            playSound(laserSound);
           }
           gameFrame++;
         }
@@ -1172,7 +1151,7 @@ int stageOne() {
           handDstRect.x = hero.posX - 65;
         } else if (gameFrame == -HITAREA_W * 3) {
           SDL_Delay(500);
-          stageOne();
+          start();
           return 1;
         } else if (gameFrame > -HITAREA_W * 3) {
           hero.posX++;
@@ -1182,11 +1161,6 @@ int stageOne() {
       } else if (gameFrame == -1) {
         updateBullets(bulletsLoaded);
         gameFrame++;
-        /*for (i = 0; i < ROWS; i++) {
-          for (j = 0; j < COLUMNS; j++) {
-            block[i][j].frame = 0;
-          }
-        }*/
       }
     }
 
@@ -1236,20 +1210,15 @@ int stageOne() {
   return 0;
 }
 
-void menu() { stageOne(); }
-
 int main(int argc, char const *argv[]) {
   /* Start up SDL and create window */
   srand(time(NULL));
   if (!init()) {
     printf("SDL could not be initialized\n");
   } else {
-    if (!loadMedia()) {
-      printf("Media could not be loaded\n");
-    } else {
-      gQuit = 0;
-      menu();
-    }
+    loadMedia();
+    gQuit = 0;
+    start();
   }
   closing();
   return 0;
