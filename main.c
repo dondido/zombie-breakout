@@ -3,14 +3,28 @@
 #include <time.h>
 #include "SDL2/SDL.h"
 #include "SDL2/SDL_image.h"
-#include "SDL2/SDL_mixer.h"
-#include "SDL2/SDL_ttf.h"
+
+#if __EMSCRIPTEN__
+  #include <emscripten.h>
+  #include <SDL/SDL_ttf.h>
+  #include <SDL/SDL_mixer.h>
+
+  #define FRAME_TIME 10
+  #define BULLET_SPEED 9
+  #define BULLET_GAP 10
+#else
+  #include "SDL2/SDL_ttf.h"
+  #include <SDL2/SDL_mixer.h>
+
+  #define FRAME_TIME 30
+  #define BULLET_SPEED 3
+  #define BULLET_GAP 30
+#endif
 
 #define SDL_DELAY 4
 #define ROWS 13
 #define COLUMNS 6
 #define BULLET_SIDE 10
-#define BULLET_GAP 28
 #define BG_W 1170
 #define HAND_W 70
 #define HAND_H 34
@@ -23,12 +37,17 @@
 #define PI 3.14159265
 #define HERO_HAND_Y 40
 
-#define BAR_HEIGHT 80
+#define HERO_W 80
+#define HERO_H 91
 #define WINDOW_WIDTH 960
 #define WINDOW_HEIGHT 540
 #define BUTTON_WIDTH 65 /* dimensions of Music and Sound button */
 #define BUTTON_HEIGHT 65
 #define MARGIN 10
+#define RESET_FRAME -HITAREA_W * 3
+#define ENEMY_OFFSET HITAREA_W - HITAREA_X
+#define FIELD_X WINDOW_WIDTH - 12
+#define STEP_Y 3
 
 typedef struct _TEXT_TEXTURE {
   SDL_Texture *txtText;
@@ -77,6 +96,7 @@ double ballY = 0;
 double sinRadians = 0;
 double cosRadians = 0;
 /* The window we'll be rendering to */
+SDL_Event e;
 SDL_Rect ptsDstRect;
 SDL_Rect bltsDstRect;
 SDL_Rect dstPauseButton;
@@ -94,7 +114,7 @@ SDL_Texture *mainMenu;
 SDL_Texture *gameTitle;
 /* Current displayed ball image */
 SDL_Texture *gHandSurface = NULL;
-/* blocks' surface */
+/* block' surface */
 SDL_Texture *zombieLegs;
 SDL_Texture *zombiePants;
 SDL_Texture *zombieBody;
@@ -137,21 +157,56 @@ SDL_Texture *mscOffText;
 // The color of the font
 SDL_Color textColor = {255, 255, 255};
 
-void drawCharacter(OBJECT *hero, int *characterFrame, int characterTime, int *gameFrame) {
-  int x = *characterFrame * 80;
-  SDL_Rect srcRect = {x, 0, 80, 91};
-  SDL_Rect dstRect = {hero->posX, hero->posY, 80, 91};
+
+
+
+OBJECT *ball;
+OBJECT hero;
+SDL_Point aimPnt;
+ENEMY block[ROWS][COLUMNS];
+OBJECT balls[200];
+SDL_Point handPnt = {0, HAND_H / 2};
+SDL_Rect handDstRect = {0, 0, HAND_W, HAND_H};
+SDL_Rect bulletRect = {0, 0, BULLET_SIDE, BULLET_SIDE};
+
+int i, j, ii, hitAreaY;
+int quantBlocks = 0;
+int bulletIconY = WINDOW_HEIGHT - MARGIN * 3 + BULLET_SIDE / 2;
+int gameFrame = RESET_FRAME;
+int characterFrame = 0;
+int characterTime = 0;
+int handPvtPntY = 0;
+
+
+int level = 1;
+int bulletsLoaded = 1;
+int killedInColumn = 0;
+int lastKilled = 0;
+
+int bulletsInTheMagazine = 0;
+int shotInterval = 0;
+int enemyInColumn = 0;
+int hasGameStarted = 0;
+
+
+
+
+
+void drawCharacter() {
+  SDL_Rect srcRect = {characterFrame * HERO_W, 0, HERO_W, HERO_H};
+  SDL_Rect dstRect = {hero.posX, hero.posY, HERO_W, HERO_H};
   if (gPausedGame == 0) {
-    if (hero->stepY || (*gameFrame < 0 && *gameFrame > -600)) {
-      if (characterTime % 20 == 0) {
-        *characterFrame = *characterFrame == 2 ? 1 : 2;
+    if (hero.stepY || (gameFrame < 0 && gameFrame > -600)) {
+      
+      if (characterTime % FRAME_TIME == 0) {
+        characterFrame = characterFrame == 2 ? 1 : 2;
       }
-    } else if (characterTime % 30 == 0) {
-      *characterFrame = *characterFrame == 1 ? 0 : 1;
+    } else if (characterTime % FRAME_TIME == 0) {
+      characterFrame = characterFrame == 1 ? 0 : 1;
     }
     characterTime++;
   }
-  if (*gameFrame < -HITAREA_W * 3) {
+  if (gameFrame < RESET_FRAME) {
     SDL_RenderCopyEx(gRenderer, heroText, &srcRect, &dstRect, 0, NULL, SDL_FLIP_HORIZONTAL);
   } else {
     SDL_RenderCopy(gRenderer, heroText, &srcRect, &dstRect);
@@ -167,10 +222,10 @@ void animateEnemyEnd(ENEMY *block, int alpha) {
 
 void drawEnemy(ENEMY *block) {
   SDL_Rect frame = (SDL_Rect){block->frame * ENEMY_W, 0, ENEMY_W, ENEMY_H};
-  SDL_Rect dstBlock = (SDL_Rect){block->posX + HITAREA_W - HITAREA_X, block->posY, ENEMY_W, ENEMY_H};
+  SDL_Rect dstBlock = (SDL_Rect){block->posX + ENEMY_OFFSET, block->posY, ENEMY_W, ENEMY_H};
   SDL_Rect txtDstRect = {block->posX + block->txtDstRect.x, block->txtDstRect.y, block->txtDstRect.w, block->txtDstRect.h};
 
-  if (!gPausedGame) {    
+  if (gPausedGame == 0) {    
     if (block->frame > 1 && block->time < 0) {
       if(block->time == -480 || block->time == -320 || block->time == -80) {
         animateEnemyEnd(block, 200);
@@ -188,7 +243,7 @@ void drawEnemy(ENEMY *block) {
         animateEnemyEnd(block, 255);
       }
     }
-    else if (block->time % 30 == 0) {
+    else if (block->time % FRAME_TIME == 0) {
       block->frame = block->frame == 1 ? 0 : 1;
     }
 
@@ -230,8 +285,7 @@ void updateBullets(int n) {
 void setZombieTextTexture(ENEMY *block) {
   SDL_DestroyTexture(block->textTexture);
   sprintf(block->lifeLabel, "%d", block->resistance);
-  SDL_Surface *textSurface =
-      TTF_RenderText_Solid(font20, block->lifeLabel, textColor);
+  SDL_Surface *textSurface = TTF_RenderText_Solid(font20, block->lifeLabel, textColor);
 
   block->txtDstRect.w = textSurface->w;
   block->txtDstRect.h = textSurface->h;
@@ -258,16 +312,16 @@ void playSound(Mix_Chunk* sound) {
   }
 }
 
-void damage(ENEMY blocks[][COLUMNS], int row, int column) {
+void damage(int row, int column) {
   int j;
   int allDead = 1;
-  ENEMY* b = &blocks[row][column];
+  ENEMY* b = &block[row][column];
   b->resistance--;
   setZombieTextTexture(b);
   
   if (b->resistance == 0) {
     for (j = 0; j < COLUMNS; j++) {
-      if(blocks[row][j].resistance > 0) {
+      if(block[row][j].resistance > 0) {
         allDead = 0;
       }
     }
@@ -282,7 +336,7 @@ void damage(ENEMY blocks[][COLUMNS], int row, int column) {
   updatePoints(1);
 }
 
-void collide(ENEMY blocks[][COLUMNS], OBJECT *ball, int *quantBlocks) {
+void collide(OBJECT *ball, int *quantBlocks) {
   int movingRight = ball->stepX > 0;
   int movingBottom = ball->stepY >= 0;
   int left = ball->posX / HITAREA_W - 1;
@@ -294,9 +348,9 @@ void collide(ENEMY blocks[][COLUMNS], OBJECT *ball, int *quantBlocks) {
     bottom = top;
   }
 
-  if (blocks[left][top].resistance == 0 && blocks[right][top].resistance == 0 &&
-      blocks[left][bottom].resistance == 0 &&
-      blocks[right][bottom].resistance == 0) {
+  if (block[left][top].resistance == 0 && block[right][top].resistance == 0 &&
+      block[left][bottom].resistance == 0 &&
+      block[right][bottom].resistance == 0) {
     return;
   }
 
@@ -309,16 +363,16 @@ void collide(ENEMY blocks[][COLUMNS], OBJECT *ball, int *quantBlocks) {
     if (movingRight) {
       x1 = right;
     }
-    if (blocks[x1][top].resistance) {
-      damage(blocks, x1, top);
+    if (block[x1][top].resistance) {
+      damage(x1, top);
       reflectX(ball);
     }
   } else if (left == right) {
     if (movingBottom) {
       y1 = bottom;
     }
-    if (blocks[left][y1].resistance) {
-      damage(blocks, left, y1);
+    if (block[left][y1].resistance) {
+      damage(left, y1);
       reflectY(ball);
     }
   } else if (top != bottom && left != right) {
@@ -330,20 +384,20 @@ void collide(ENEMY blocks[][COLUMNS], OBJECT *ball, int *quantBlocks) {
       y1 = bottom;
       y2 = top;
     }
-    if (blocks[x1][y1].resistance) {
-      damage(blocks, x1, y1);
-      if (blocks[x2][y1].resistance == 0 && blocks[x1][y2].resistance == 0) {
+    if (block[x1][y1].resistance) {
+      damage(x1, y1);
+      if (block[x2][y1].resistance == 0 && block[x1][y2].resistance == 0) {
         reflectX(ball);
         reflectY(ball);
         return;
       }
     }
-    if (blocks[x2][y1].resistance) {
-      damage(blocks, x2, y1);
+    if (block[x2][y1].resistance) {
+      damage(x2, y1);
       reflectY(ball);
     }
-    if (blocks[x1][y2].resistance) {
-      damage(blocks, x1, y2);
+    if (block[x1][y2].resistance) {
+      damage(x1, y2);
       reflectX(ball);
     }
   }
@@ -375,7 +429,7 @@ void drawSprite(int x, int y, int armsSpriteY, int eyesSpriteX, int mouthSpriteX
   SDL_RenderCopy(gRenderer, zombieHair, &srcRect, &dstRect);
 }
 
-ENEMY createEnemy(int posX, int posY, int level) {
+ENEMY createEnemy(int posX, int posY) {
   int hairSpriteY = ENEMY_H * (rand() % 5);
   int hairColour = rand() % 7;
   int hairSpriteX = ENEMY_W * hairColour;
@@ -401,12 +455,9 @@ ENEMY createEnemy(int posX, int posY, int level) {
   // use SDL_SetTextureBlendMode . Not SDL_SetRenderDrawBlendMode
   SDL_SetTextureBlendMode(block.sprite, SDL_BLENDMODE_BLEND);
 
-  drawSprite(0, 0, 0, eyesSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY,
-             browsSpriteX, pantsSpriteX);
-  drawSprite(ENEMY_W, 3, armsSpriteX, eyesSpriteX, mouthSpriteX, hairSpriteX,
-             hairSpriteY, browsSpriteX, pantsSpriteX);
-  drawSprite(ENEMY_W * 2, 3, 0, blinkSpriteX, mouthSpriteX, hairSpriteX,
-             hairSpriteY, browsSpriteX, pantsSpriteX);
+  drawSprite(0, 0, 0, eyesSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
+  drawSprite(ENEMY_W, 3, armsSpriteX, eyesSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
+  drawSprite(ENEMY_W * 2, 3, 0, blinkSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
 
   /**/SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 255);
   SDL_RenderFillRect(gRenderer, &bulletRect);
@@ -426,7 +477,7 @@ int moveObject(OBJECT *p) {
     return 1;
   }
 
-  if (p->posX + BULLET_SIDE > WINDOW_WIDTH - 12) {
+  if (p->posX + BULLET_SIDE > FIELD_X) {
     p->stepX = -p->stepX;
   }
 
@@ -462,7 +513,7 @@ int init() {
   }
 
   /*Initialize SDL*/
-  if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
     printf("SDL could not initialize! SDL Error: %s\n", SDL_GetError());
     success = 0;
   } else {
@@ -501,6 +552,9 @@ int init() {
                IMG_GetError());
         success = 0;
       }
+      if( Mix_OpenAudio( 22050, MIX_DEFAULT_FORMAT, 2, 4096 ) == -1 ) {
+        success = 0;
+      }
     }
   }
   return success;
@@ -532,34 +586,41 @@ SDL_Texture *loadTexture(char *path) {
 
 void loadMedia() {
   /* Load menu surface */
-  mainMenu = loadTexture("images/menu-11-menu.png");
-  gameTitle = loadTexture("images/menu-11-title.png");
-  pauseButton = loadTexture("images/menu-11-pause.png");
-  sndOnText = loadTexture("images/menu-11-sound-on.png");
-  mscOffText = loadTexture("images/menu-11-music-off.png");
+  mainMenu = loadTexture("assets/images/menu-11-menu.png");
+  gameTitle = loadTexture("assets/images/menu-11-title.png");
+  pauseButton = loadTexture("assets/images/menu-11-pause.png");
+  sndOnText = loadTexture("assets/images/menu-11-sound-on.png");
+  mscOffText = loadTexture("assets/images/menu-11-music-off.png");
 
   /* load bar surface */
-  heroText = loadTexture("images/character-8.png");
-  gHandSurface = loadTexture("images/character-hand-2.png");
+  heroText = loadTexture("assets/images/character-8.png");
+  gHandSurface = loadTexture("assets/images/character-hand-2.png");
 
-  stageBackground = loadTexture("images/zombie-grid-3.png");
+  stageBackground = loadTexture("assets/images/zombie-grid-3.png");
 
   /* load zombie texture */
-  zombieLegs = loadTexture("images/zombie-legs-3.png");
-  zombieHair = loadTexture("images/hair-spritesheet.png");
-  zombiePants = loadTexture("images/zombie-pants-3.png");
-  zombieTorso = loadTexture("images/zombie-torso-2.png");
-  zombieBrows = loadTexture("images/zombie-brows-2.png");
-  zombieEyes = loadTexture("images/zombie-eyes-3.png");
-  zombieArms = loadTexture("images/zombie-arms-2.png");
-  zombieMouth = loadTexture("images/zombie-mouth-2.png");
+  zombieLegs = loadTexture("assets/images/zombie-legs-3.png");
+  zombieHair = loadTexture("assets/images/hair-spritesheet.png");
+  zombiePants = loadTexture("assets/images/zombie-pants-3.png");
+  zombieTorso = loadTexture("assets/images/zombie-torso-2.png");
+  zombieBrows = loadTexture("assets/images/zombie-brows-2.png");
+  zombieEyes = loadTexture("assets/images/zombie-eyes-3.png");
+  zombieArms = loadTexture("assets/images/zombie-arms-2.png");
+  zombieMouth = loadTexture("assets/images/zombie-mouth-2.png");
 
-  /*load sounds */
-  hitSound = Mix_LoadWAV("sounds/hit.wav");
-  destroySound = Mix_LoadWAV("sounds/destroy.wav");
-  laserSound = Mix_LoadWAV("sounds/laser.wav");
-  extraSound = Mix_LoadWAV("sounds/extra.wav");
-  gameMusic = Mix_LoadMUS("sounds/music.mp3");
+  /*load sounds 
+  hitSound = Mix_LoadWAV("assets/sounds/hit.wav");
+  destroySound = Mix_LoadWAV("assets/sounds/destroy.wav");
+  laserSound = Mix_LoadWAV("assets/sounds/laser.wav");
+  extraSound = Mix_LoadWAV("assets/sounds/extra.wav");
+  gameMusic = Mix_LoadMUS("assets/sounds/music.mp3");
+  */
+
+  /*load fonts*/
+  // TTF_Font *font;
+  font20 = TTF_OpenFont("assets/images/visitor1.ttf", 20);
+  font28 = TTF_OpenFont("assets/images/visitor1.ttf", 28);
+  font42 = TTF_OpenFont("assets/images/visitor1.ttf", 42);
 }
 
 SDL_Texture *createEmptySprite() {
@@ -589,7 +650,7 @@ SDL_Texture *createExtraBulletSprite() {
   SDL_RenderDrawLine(gRenderer, 0, 0, 0, WINDOW_HEIGHT - ENEMY_H);
   SDL_RenderDrawLine(gRenderer, 0, WINDOW_HEIGHT, 0, WINDOW_HEIGHT * 2 - ENEMY_H * 2);
   SDL_RenderFillRect(gRenderer, &bulletRect);
-  printf("AAAAAAA\n");
+
   setTextTexture(&txtText3, font20, "+1");
   txtText3.txtDstRect.x = ENEMY_W / 2 + BULLET_SIDE * 2;
   txtText3.txtDstRect.y = WINDOW_HEIGHT - ENEMY_H / 2;
@@ -619,16 +680,17 @@ void showHelp() {
   int textY = WINDOW_HEIGHT / 4;
   scrnText = createEmptySprite();
   renderXCenteredText(font42, "HOW TO PLAY", textY - 42 * 2);
-  renderXCenteredText(font28, "1. Point and tap to move you character.",
-                      textY + 2 * 28);
-  renderXCenteredText(font28, "2. Tap and hold down to aim at the target.",
-                      textY + 4 * 28);
+  renderXCenteredText(font28, "1. Point and tap to move you character.", textY + 2 * 28);
+  renderXCenteredText(font28, "2. Tap and hold down to aim at the target.",  textY + 4 * 28);
   renderXCenteredText(font28, "3. Release to shoot.", textY + 6 * 28);
-  renderXCenteredText(font28, "4. Defend the city against hordes of zombies.",
-                      textY + 8 * 28);
+  renderXCenteredText(font28, "4. Defend the city against hordes of zombies.", textY + 8 * 28);
   SDL_SetRenderTarget(gRenderer, NULL);
 }
 
+#if __EMSCRIPTEN__
+void listRecords() {}
+void setRank() {}
+#else
 void listRecords() {
   PLAYER records[5];
   int empty = 1;
@@ -723,6 +785,7 @@ int setRank() {
   }
   return 1;
 }
+#endif
 
 void closing() {
   // SDL_FreeSurface(mainMenu);
@@ -798,7 +861,92 @@ void playMusic() {
   }
 }
 
-void handleButtons(SDL_Event e, int *gameFrame, int *hasGameStarted) {
+void setAngle() {
+  double maxRadians = 0;
+  radians = atan2(e.motion.y - handDstRect.y - handDstRect.h / 2, e.motion.x - handDstRect.x);
+
+  degrees = radians * STRAIGHT_ANGLE / PI;
+  aim = 1;
+  if (degrees > MAX_DEGREES) {
+    degrees = MAX_DEGREES;
+    aim = 0;
+  } else if (degrees < -MAX_DEGREES) {
+    degrees = -MAX_DEGREES;
+    aim = 0;
+  }
+  maxRadians = degrees * PI / STRAIGHT_ANGLE;
+  sinRadians = sin(maxRadians);
+  cosRadians = cos(maxRadians);
+
+  ballY = sinRadians * BULLET_SPEED;
+  ballX = cosRadians * BULLET_SPEED;
+}
+
+SDL_Point getRulerCorners(int pvtX, int pvtY, int ox, int oy) {
+  // The offset of a corner in local coordinates (i.e. relative to the pivot  point)
+  // which corner will depend on the coordinate reference system used in our environment
+  SDL_Point pnt;
+
+  // The rotated position of this corner in world coordinates
+  pnt.x = pvtX + (ox * cosRadians) - (oy * sinRadians);
+  pnt.y = pvtY + (ox * sinRadians) + (oy * cosRadians);
+
+  return pnt;
+}
+
+void reset() {
+ 
+  quantBlocks = 0;
+  hero = (OBJECT){-HITAREA_W - 45, WINDOW_HEIGHT / 2 - HERO_W / 2, 0, 0};
+  //gameFrame = RESET_FRAME;
+  characterFrame = 0;
+  characterTime = 0;
+  handPvtPntY = 0;
+
+  gPoints = 0;
+  
+
+  level = 1;
+  bulletsLoaded = 1;
+  killedInColumn = 0;
+  lastKilled = 0;
+
+  bulletsInTheMagazine = 0;
+  shotInterval = 0;
+  enemyInColumn = 0;
+  hasGameStarted = 0;
+
+  gPausedGame = 0;
+
+  dstPauseButton = (SDL_Rect){WINDOW_WIDTH - BUTTON_WIDTH - MARGIN, MARGIN, BUTTON_WIDTH, BUTTON_HEIGHT};
+
+  scrnText = NULL;
+
+
+  updatePoints(gPoints);
+  updateMenuTexture();
+  updateBullets(1);
+
+  for (i = 0; i < ROWS - 1; i++) {
+    for (j = 0; j < COLUMNS; j++) {
+      block[i][j] = (ENEMY){0};
+    }
+  }
+  for (j = 0; j < COLUMNS; j++) {
+    if (rand() % 3 == 0) {
+      block[ROWS - 1][j] = createEnemy(HITAREA_W * ROWS, ENEMY_H * j);
+      quantBlocks++;
+    } else {
+      block[i][j] = (ENEMY){0};
+    }
+  }
+  if(quantBlocks == 0) {
+    block[rand() % 6][j] = createEnemy(HITAREA_W * ROWS, ENEMY_H * j);
+      quantBlocks++;
+  }
+}
+
+void handleButtons() {
   SDL_Rect playDstRect = {WINDOW_WIDTH / 2 - 84 / 2, WINDOW_HEIGHT - 100, 84, 84};
   SDL_Rect exitDstRect = {208, 457, BUTTON_WIDTH, BUTTON_HEIGHT};
   SDL_Rect sndDstRect = {296, 457, BUTTON_WIDTH, BUTTON_HEIGHT};
@@ -807,24 +955,58 @@ void handleButtons(SDL_Event e, int *gameFrame, int *hasGameStarted) {
   SDL_Rect marketDstRect = {616, 457, BUTTON_WIDTH, BUTTON_HEIGHT};
   SDL_Rect helpDstRect = {694, 457, BUTTON_WIDTH, BUTTON_HEIGHT};
 
+  if (gPausedGame == 0 && hasGameStarted) {
+    switch (e.type) {
+      case SDL_QUIT:
+        gQuit = 1;
+        break;
+      case SDL_MOUSEBUTTONDOWN:  // if the event is mouse click
+        if (clickButton(e, dstPauseButton)) {
+          gPausedGame = 1;
+          if (gMusicCondition) {
+            Mix_PauseMusic();
+          }
+          break;
+        }
+        if (e.motion.x < 120 && (gameFrame == shotInterval || gameFrame < 2)) {
+          gHeroNewY = e.motion.y - HERO_HAND_Y;
+          hero.stepY = gHeroNewY > hero.posY ? STEP_Y : -STEP_Y;
+
+          characterTime = 1;
+          characterFrame = 2;
+          break;
+        }
+        if (gameFrame == 1 || gameFrame == 0) {
+          setAngle();
+          isMouseDown = 1;
+          gameFrame = 2;
+        }
+        break;
+      case SDL_MOUSEBUTTONUP:
+        if (e.motion.x < 110 && (gameFrame == 2 || gameFrame == 0)) {
+          gameFrame = 1;
+        }
+        isMouseDown = 0;
+        break;
+      case SDL_MOUSEMOTION:
+        if (isMouseDown == 1) {
+          setAngle();
+        }
+        break;
+    }
+    return;
+  }
+
   switch (e.type) {
     case SDL_QUIT:
       gQuit = 1;
       break;
-    case SDL_MOUSEBUTTONDOWN:
-      if (clickButton(e, dstPauseButton)) {
-        gPausedGame = 1;
-        if (gMusicCondition) {
-          Mix_PauseMusic();
-        }
-      }
-      break;
     case SDL_MOUSEBUTTONUP:
       if (clickButton(e, exitDstRect)) {
-        if (*hasGameStarted == 0 && scrnText == NULL) {
+        if (hasGameStarted == 0 && scrnText == NULL) {
           gQuit = 1;
-        } else if (*hasGameStarted == 1 && gPausedGame) {
-          *gameFrame = -1000;
+        } else if (hasGameStarted == 1 && gPausedGame) {
+          gameFrame = -WINDOW_WIDTH;
           setRank();
         }
         break;
@@ -833,11 +1015,11 @@ void handleButtons(SDL_Event e, int *gameFrame, int *hasGameStarted) {
         if (gPausedGame) {
           gPausedGame = 0;
           playMusic();
-        } else if (*hasGameStarted == 0) {
-          *hasGameStarted = 1;
+        } else if (hasGameStarted == 0) {
+          hasGameStarted = 1;
           playMusic();
         }
-      } else if (*hasGameStarted == 0 || (*hasGameStarted == 1 && gPausedGame)) {
+      } else if (hasGameStarted == 0 || (hasGameStarted == 1 && gPausedGame)) {
         if (clickButton(e, recordsDstRect)) {
           listRecords();
         } else if (clickButton(e, marketDstRect)) {
@@ -854,360 +1036,223 @@ void handleButtons(SDL_Event e, int *gameFrame, int *hasGameStarted) {
   }
 }
 
-void setAngle(SDL_Event e, SDL_Rect handDstRect) {
-  double maxRadians = 0;
-  double ballStepSpan = 3;
-  radians = atan2(e.motion.y - handDstRect.y - handDstRect.h / 2,
-                  e.motion.x - handDstRect.x);
-
-  degrees = radians * STRAIGHT_ANGLE / PI;
-  aim = 1;
-  if (degrees > MAX_DEGREES) {
-    degrees = MAX_DEGREES;
-    aim = 0;
-  } else if (degrees < -MAX_DEGREES) {
-    degrees = -MAX_DEGREES;
-    aim = 0;
+void tick() {
+  /* verifies if any key have been pressed */
+  while (SDL_PollEvent(&e) != 0) {
+    handleButtons();
   }
-  maxRadians = degrees * PI / STRAIGHT_ANGLE;
-  sinRadians = sin(maxRadians);
-  cosRadians = cos(maxRadians);
 
-  ballY = sinRadians * ballStepSpan;
-  ballX = cosRadians * ballStepSpan;
-}
-
-SDL_Point getRulerCorners(int pvtX, int pvtY, int ox, int oy) {
-  // The offset of a corner in local coordinates (i.e. relative to the pivot
-  // point)
-  //(which corner will depend on the coordinate reference system used in your
-  //environment)
-  SDL_Point pnt;
-
-  // The rotated position of this corner in world coordinates
-  pnt.x = pvtX + (ox * cosRadians) - (oy * sinRadians);
-  pnt.y = pvtY + (ox * sinRadians) + (oy * cosRadians);
-
-  return pnt;
-}
-
-int start() {
-  OBJECT *ball;
-  OBJECT hero = {-HITAREA_W - 45, WINDOW_HEIGHT / 2 - BAR_HEIGHT / 2, 0, 0};
-  SDL_Point aimPnt;
-  ENEMY block[ROWS][COLUMNS];
-  OBJECT balls[200];
-  SDL_Point handPnt = {0, HAND_H / 2};
-  SDL_Rect handDstRect = {0, 0, HAND_W, HAND_H};
-  SDL_Rect bulletRect = {0, 0, BULLET_SIDE, BULLET_SIDE};
-
-  // TTF_Font *font;
-  font20 = TTF_OpenFont("images/visitor1.ttf", 20);
-  font28 = TTF_OpenFont("images/visitor1.ttf", 28);
-  font42 = TTF_OpenFont("images/visitor1.ttf", 42);
-
-  int i, j, ii, hitAreaY;
-  SDL_Event e;
-  int quantBlocks = 0;
-  int bulletIconY = WINDOW_HEIGHT - MARGIN * 3 + BULLET_SIDE / 2;
-  int gameFrame = -HITAREA_W * 3;
-  int characterFrame = 0;
-  int characterTime = 0;
-  int heroStep = 3;
-  int handPvtPntY = 0;
-
-  gPoints = 0;
-  updatePoints(gPoints);
-
-  int level = 1;
-  int bulletsLoaded = 1;
-  int killedInColumn = 0;
-  int lastKilled = 0;
-
-  int bulletsInTheMagazine = 0;
-  int shotInterval = 0;
-  int enemyInColumn = 0;
-  int hasGameStarted = 0;
-
-  gPausedGame = 0;
-
-  dstPauseButton = (SDL_Rect){WINDOW_WIDTH - BUTTON_WIDTH - MARGIN, MARGIN, BUTTON_WIDTH, BUTTON_HEIGHT};
-
-  scrnText = NULL;
-  updateMenuTexture();
-
-  updateBullets(1);
-
-  for (i = 0; i < ROWS - 1; i++) {
-    for (j = 0; j < COLUMNS; j++) {
-      block[i][j] = (ENEMY){0};
-    }
-  }
+  SDL_RenderClear(gRenderer);
+  SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 0);
+  SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg1);
+  SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg2);
   for (j = 0; j < COLUMNS; j++) {
-    if (rand() % 3 == 0) {
-      block[ROWS - 1][j] = createEnemy(HITAREA_W * ROWS, ENEMY_H * j, level);
-      quantBlocks++;
-    } else {
-      block[i][j] = (ENEMY){0};
+    for (i = 0; i < ROWS; i++) {
+      if (block[i][j].time) {
+        drawEnemy(&block[i][j]);
+      }
+      if (block[i][j].time == -400) {
+        block[i][j].frame = 3;
+        playSound(extraSound);
+      }
+      else if (block[i][j].time == -1) {
+        SDL_DestroyTexture(block[i][j].textTexture);
+        SDL_DestroyTexture(block[i][j].sprite);
+        block[i][j] = (ENEMY){0};
+      }
     }
   }
-  if(quantBlocks == 0) {
-    block[rand() % 6][j] = createEnemy(HITAREA_W * ROWS, ENEMY_H * j, level);
-      quantBlocks++;
-  }
 
-  /* Starts game main loop */
-  while (!gQuit) {
-    /* verifies if any key have been pressed */
-    while (SDL_PollEvent(&e) != 0) {
-      handleButtons(e, &gameFrame, &hasGameStarted);
-      if (!gPausedGame && hasGameStarted) {
-        switch (e.type) {
-          case SDL_MOUSEBUTTONDOWN:  // if the event is mouse click
+  if (gPausedGame == 0) {
+    if (hero.stepY != 0 && fabs(gHeroNewY - hero.posY) <= STEP_Y) {
+      hero.posY = gHeroNewY;
+      hero.stepY = 0;
+    }
+    if (gameFrame > 0) {
+      if (gameFrame == 2) {
+        if (aim) {
+          // the coordinates of Y in world coordinates
+          handPvtPntY = handDstRect.y + handDstRect.h / 2;
+          aimPnt = getRulerCorners(handDstRect.x, handPvtPntY, handDstRect.w / 2, -2);
+          SDL_RenderDrawLine(gRenderer, aimPnt.x, aimPnt.y, e.motion.x, e.motion.y);
+          SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
 
-            if (e.motion.x < 120 && (gameFrame == shotInterval || gameFrame < 2)) {
-              gHeroNewY = e.motion.y - HERO_HAND_Y;
-              hero.stepY = gHeroNewY > hero.posY ? heroStep : -heroStep;
+          if (isMouseDown == 0) {
+            gameFrame = 3;
+            shotInterval = bulletsLoaded * BULLET_GAP + 1;
+          }
+        }
+      } else if (gameFrame < shotInterval) {
+        if (gameFrame % BULLET_GAP == 0) {
+          ball = &balls[gameFrame / BULLET_GAP - 1];
+          aimPnt = getRulerCorners(handDstRect.x, handPvtPntY, handDstRect.w, -12);
+          ball->posY = aimPnt.y;
+          ball->posX = aimPnt.x;
+          ball->stepY = ballY;
+          ball->stepX = ballX;
+          updateBullets(bulletsLoaded - gameFrame / BULLET_GAP);
+          playSound(laserSound);
+        }
+        gameFrame++;
+      }
 
-              characterTime = 1;
-              characterFrame = 2;
+      if (gameFrame > 2) {
+        for (ii = 0; ii < bulletsLoaded; ii++) {
+          bulletsInTheMagazine += moveObject(&balls[ii]);
+          if (balls[ii].posX > 0) {
+            collide(&balls[ii], &quantBlocks);
+            bulletRect.x = balls[ii].posX;
+            bulletRect.y = balls[ii].posY;
+            SDL_RenderFillRect(gRenderer, &bulletRect);
+          }
+        }
+      }
+
+      if (gameFrame == shotInterval) {
+        if (bulletsInTheMagazine == bulletsLoaded) {
+          for (j = 0; j < COLUMNS; j++) {
+            if (block[2][j].resistance) {
+              gameFrame = -WINDOW_WIDTH;
+              Mix_FadeOutMusic(WINDOW_WIDTH * 2);
+              setRank();
               break;
-            }
-            if (gameFrame == 1 || gameFrame == 0) {
-              // printf("gameFrame2 %d %d \n", gameFrame, gHeroNewY);
-              setAngle(e, handDstRect);
-              isMouseDown = 1;
-              gameFrame = 2;
-            }
-            break;
-          case SDL_MOUSEBUTTONUP:
-            // printf("SDL_MOUSEBUTTONUP %d %d %d \n", isMouseDown, gameFrame,
-            // e.motion.x);
-            if (e.motion.x < 110 && (gameFrame == 2 || gameFrame == 0)) {
-              gameFrame = 1;
-            }
-            isMouseDown = 0;
-            break;
-          case SDL_MOUSEMOTION:
-            // printf("SDL_MOUSEMOTION %d %f %f \n", isMouseDown, radians,
-            // degrees);
-            if (isMouseDown == 1) {
-              setAngle(e, handDstRect);
-            }
-            break;
-        }
-      }
-    }
-
-    SDL_RenderClear(gRenderer);
-    SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 0);
-    SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg1);
-    SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg2);
-    for (j = 0; j < COLUMNS; j++) {
-      for (i = 0; i < ROWS; i++) {
-        if (block[i][j].time) {
-          drawEnemy(&block[i][j]);
-        }
-        if (block[i][j].time == -400) {
-          block[i][j].frame = 3;
-          playSound(extraSound);
-        }
-        else if (block[i][j].time == -1) {
-          SDL_DestroyTexture(block[i][j].textTexture);
-          SDL_DestroyTexture(block[i][j].sprite);
-          block[i][j] = (ENEMY){0};
-        }
-      }
-    }
-
-    if (!gPausedGame) {
-      if (hero.stepY != 0 && abs(gHeroNewY - hero.posY) <= heroStep) {
-        hero.posY = gHeroNewY;
-        hero.stepY = 0;
-      }
-      if (gameFrame > 0) {
-        if (gameFrame == 2) {
-          if (aim) {
-            // the coordinates of Y in world coordinates
-            handPvtPntY = handDstRect.y + handDstRect.h / 2;
-            aimPnt = getRulerCorners(handDstRect.x, handPvtPntY, handDstRect.w / 2, -2);
-            SDL_RenderDrawLine(gRenderer, aimPnt.x, aimPnt.y, e.motion.x, e.motion.y);
-            SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
-
-            if (isMouseDown == 0) {
-              gameFrame = 3;
-              shotInterval = bulletsLoaded * BULLET_GAP + 1;
-            }
+            };
           }
-        } else if (gameFrame < shotInterval) {
-          if (gameFrame % BULLET_GAP == 0) {
-            ball = &balls[gameFrame / BULLET_GAP - 1];
-            aimPnt = getRulerCorners(handDstRect.x, handPvtPntY, handDstRect.w, -12);
-            ball->posY = aimPnt.y;
-            ball->posX = aimPnt.x;
-            ball->stepY = ballY;
-            ball->stepX = ballX;
-            updateBullets(bulletsLoaded - gameFrame / BULLET_GAP);
-            playSound(laserSound);
-          }
-          gameFrame++;
-        }
-
-        if (gameFrame > 2) {
-          for (ii = 0; ii < bulletsLoaded; ii++) {
-            bulletsInTheMagazine += moveObject(&balls[ii]);
-            if (balls[ii].posX > 0) {
-              collide(block, &balls[ii], &quantBlocks);
-              bulletRect.x = balls[ii].posX;
-              bulletRect.y = balls[ii].posY;
-              SDL_RenderFillRect(gRenderer, &bulletRect);
-            }
-          }
-        }
-
-        if (gameFrame == shotInterval) {
-          if (bulletsInTheMagazine == bulletsLoaded) {
-            for (j = 0; j < COLUMNS; j++) {
-              if (block[2][j].resistance) {
-                gameFrame = -1000;
-                setRank();
-                break;
-              };
-            }
-            if (gameFrame != -1000) {
-              gameFrame = -HITAREA_W - 1;
-              shotInterval = 0;
-              for (i = 1; i < ROWS; i++) {
-                for (j = 0; j < COLUMNS; j++) {
-                  if (block[i][j].resistance == 0) {
-                    killedInColumn++;
-                    if (block[i][j].lifeLabel[0]) {
-                      block[i][j].lifeLabel[0] = 0;
-                      printf("frame %d %d %d\n", i, j, block[i][j].frame);
-                      //block[i][j].posX = 0;
-                      lastKilled = 1;
-                    }
-                  }
-                  block[i - 1][j] = block[i][j];
-                }
-                if (lastKilled && killedInColumn == COLUMNS) {
-                  printf("lastKilled %d %d\n", lastKilled, bulletsLoaded);
-                  bulletsLoaded++;
-                }
-                killedInColumn = 0;
-                lastKilled = 0;
-              }
-              level++;
+          if (gameFrame != -WINDOW_WIDTH) {
+            gameFrame = -HITAREA_W - 1;
+            shotInterval = 0;
+            for (i = 1; i < ROWS; i++) {
               for (j = 0; j < COLUMNS; j++) {
-                block[i - 1][j] = (ENEMY){0};
+                if (block[i][j].resistance == 0) {
+                  killedInColumn++;
+                  if (block[i][j].lifeLabel[0]) {
+                    block[i][j].lifeLabel[0] = 0;
+                    lastKilled = 1;
+                  }
+                }
+                block[i - 1][j] = block[i][j];
               }
-              enemyInColumn = rand() % 5 + 1;
-              for (j = 0; j < enemyInColumn; j++) {
-                hitAreaY = rand() % 6;
-                block[i - 1][hitAreaY] =
-                    createEnemy(HITAREA_W * i, ENEMY_H * hitAreaY, level);
-                quantBlocks++;
+              if (lastKilled && killedInColumn == COLUMNS) {
+                bulletsLoaded++;
               }
+              killedInColumn = 0;
+              lastKilled = 0;
             }
-          }
-          bulletsInTheMagazine = 0;
-        }
-      } else if (gameFrame < -1) {
-        gameFrame++;
-        if (gameFrame < -600) {
-          dstBg1.x += 2;
-          dstBg2.x += 2;
-          hero.posX += 2;
-          handDstRect.x = hero.posX - 65;
-          for (i = 0; i < ROWS; i++) {
+            level++;
             for (j = 0; j < COLUMNS; j++) {
-              block[i][j].posX += 2;
+              block[i - 1][j] = (ENEMY){0};
+            }
+            enemyInColumn = rand() % 5 + 1;
+            for (j = 0; j < enemyInColumn; j++) {
+              hitAreaY = rand() % 6;
+              block[i - 1][hitAreaY] = createEnemy(HITAREA_W * i, ENEMY_H * hitAreaY);
+              quantBlocks++;
             }
           }
-          if (dstBg1.x > WINDOW_WIDTH - BG_W) {
-            dstBg2.x = dstBg1.x - BG_W;
-          }
-          if (dstBg2.x > WINDOW_WIDTH - BG_W) {
-            dstBg1.x = dstBg2.x - BG_W;
+        }
+        bulletsInTheMagazine = 0;
+      }
+    } else if (gameFrame < -1) {
+      gameFrame++;
+      if (gameFrame < -600) {
+        dstBg1.x += 2;
+        dstBg2.x += 2;
+        hero.posX += 2;
+        handDstRect.x = hero.posX - 65;
+        for (i = 0; i < ROWS; i++) {
+          for (j = 0; j < COLUMNS; j++) {
+            block[i][j].posX += 2;
           }
         }
-
-        else if (gameFrame > -HITAREA_W - 1) {
-          dstBg1.x--;
-          dstBg2.x--;
-          if (dstBg1.x < 0) {
-            dstBg2.x = dstBg1.x + BG_W;
-          }
-          if (dstBg2.x < 0) {
-            dstBg1.x = dstBg2.x + BG_W;
-          }
-          for (i = 0; i < ROWS; i++) {
-            for (j = 0; j < COLUMNS; j++) {
-              block[i][j].posX--;
-            }
-          }
-        } else if (gameFrame < -300) {
-          hero.posX -= 3;
-          handDstRect.x = hero.posX - 65;
-        } else if (gameFrame == -HITAREA_W * 3) {
-          SDL_Delay(500);
-          start();
-          return 1;
-        } else if (gameFrame > -HITAREA_W * 3) {
-          hero.posX++;
-          handDstRect.x = hero.posX + 72;
+        if (dstBg1.x > WINDOW_WIDTH - BG_W) {
+          dstBg2.x = dstBg1.x - BG_W;
         }
-
-      } else if (gameFrame == -1) {
-        updateBullets(bulletsLoaded);
-        gameFrame++;
+        if (dstBg2.x > WINDOW_WIDTH - BG_W) {
+          dstBg1.x = dstBg2.x - BG_W;
+        }
       }
-    }
 
-    moveHero(&hero);
-
-    characterTime++;
-    handDstRect.y = hero.posY + 35;
-
-    if (gameFrame < -HITAREA_W * 3) {
-      SDL_RenderCopyEx(gRenderer, gHandSurface, NULL, &handDstRect, 0, &handPnt,
-                       SDL_FLIP_HORIZONTAL);
-    } else {
-      SDL_RenderCopyEx(gRenderer, gHandSurface, NULL, &handDstRect, degrees,
-                       &handPnt, SDL_FLIP_NONE);
-    }
-
-    drawCharacter(&hero, &characterFrame, characterTime, &gameFrame);
-
-    if (scrnText) {
-      SDL_RenderCopy(gRenderer, scrnText, NULL, NULL);
-      if (gameFrame > -HITAREA_W * 3) {
-        SDL_RenderCopy(gRenderer, mainMenu, NULL, NULL);
-        SDL_RenderCopy(gRenderer, btnsText, NULL, NULL);
+      else if (gameFrame > -HITAREA_W - 1) {
+        dstBg1.x--;
+        dstBg2.x--;
+        if (dstBg1.x < 0) {
+          dstBg2.x = dstBg1.x + BG_W;
+        }
+        if (dstBg2.x < 0) {
+          dstBg1.x = dstBg2.x + BG_W;
+        }
+        for (i = 0; i < ROWS; i++) {
+          for (j = 0; j < COLUMNS; j++) {
+            block[i][j].posX--;
+          }
+        }
+      } else if (gameFrame < RESET_FRAME) {
+        hero.posX -= STEP_Y;
+        handDstRect.x = hero.posX - 65;
+      } else if (gameFrame == RESET_FRAME) {
+        reset();
+        return;
+      } else if (gameFrame > RESET_FRAME) {
+        hero.posX ++;
+        handDstRect.x = hero.posX + 72;
       }
-    } else if (hasGameStarted == 0) {
-      SDL_RenderCopy(gRenderer, gameTitle, NULL, NULL);
+
+    } else if (gameFrame == -1) {
+      updateBullets(bulletsLoaded);
+      gameFrame++;
+    }
+  }
+
+  moveHero(&hero);
+
+  //characterTime++;
+  handDstRect.y = hero.posY + 35;
+
+  if (gameFrame < RESET_FRAME) {
+    SDL_RenderCopyEx(gRenderer, gHandSurface, NULL, &handDstRect, 0, &handPnt, SDL_FLIP_HORIZONTAL);
+  } else {
+    SDL_RenderCopyEx(gRenderer, gHandSurface, NULL, &handDstRect, degrees, &handPnt, SDL_FLIP_NONE);
+  }
+
+  drawCharacter();
+
+  if (scrnText) {
+    SDL_RenderCopy(gRenderer, scrnText, NULL, NULL);
+    if (gameFrame > RESET_FRAME) {
+      SDL_RenderCopy(gRenderer, mainMenu, NULL, NULL);
+      SDL_RenderCopy(gRenderer, btnsText, NULL, NULL);
+    }
+  } else if (hasGameStarted == 0) {
+    SDL_RenderCopy(gRenderer, gameTitle, NULL, NULL);
+    SDL_RenderCopy(gRenderer, mainMenu, NULL, NULL);
+    SDL_RenderCopy(gRenderer, btnsText, NULL, NULL);
+  } else {
+    SDL_RenderCopy(gRenderer, txtText1.txtText, NULL, &txtText1.txtDstRect);
+    SDL_RenderCopy(gRenderer, txtText2.txtText, NULL, &txtText2.txtDstRect);
+    bulletRect.x = MARGIN;
+    bulletRect.y = bulletIconY;
+    SDL_RenderFillRect(gRenderer, &bulletRect);
+    if (gPausedGame) {
       SDL_RenderCopy(gRenderer, mainMenu, NULL, NULL);
       SDL_RenderCopy(gRenderer, btnsText, NULL, NULL);
     } else {
-      SDL_RenderCopy(gRenderer, txtText1.txtText, NULL, &txtText1.txtDstRect);
-      SDL_RenderCopy(gRenderer, txtText2.txtText, NULL, &txtText2.txtDstRect);
-      bulletRect.x = MARGIN;
-      bulletRect.y = bulletIconY;
-      SDL_RenderFillRect(gRenderer, &bulletRect);
-      if (gPausedGame) {
-        SDL_RenderCopy(gRenderer, mainMenu, NULL, NULL);
-        SDL_RenderCopy(gRenderer, btnsText, NULL, NULL);
-      } else {
-        SDL_RenderCopy(gRenderer, pauseButton, NULL, NULL);
-      }
+      SDL_RenderCopy(gRenderer, pauseButton, NULL, NULL);
     }
-
-    SDL_Delay(SDL_DELAY);
-    SDL_RenderPresent(gRenderer);
   }
-  Mix_HaltMusic();
-  return 0;
+
+  SDL_RenderPresent(gRenderer);
+}
+
+void loop() {
+#if __EMSCRIPTEN__
+  emscripten_set_main_loop(tick, 0, 1);
+#else
+  /* Starts game main loop */
+  while (!gQuit) {
+    SDL_Delay(SDL_DELAY);
+    tick();
+  }
+#endif
 }
 
 int main(int argc, char const *argv[]) {
@@ -1218,7 +1263,8 @@ int main(int argc, char const *argv[]) {
   } else {
     loadMedia();
     gQuit = 0;
-    start();
+    reset();
+    loop();
   }
   closing();
   return 0;
