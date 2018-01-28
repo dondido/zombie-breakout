@@ -127,6 +127,7 @@ SDL_Texture *zombieMouth;
 SDL_Texture *zombieTorso;
 SDL_Texture *stageBackground;
 SDL_Texture *warningBubble;
+SDL_Texture *stopBubble;
 SDL_Texture *dangerBubble;
 /* bar's surface */
 SDL_Texture *heroText;
@@ -166,6 +167,7 @@ SDL_Rect bulletRect = {0, 0, BULLET_SIDE, BULLET_SIDE};
 SDL_Rect warningDstRect = {0, 84, HITAREA_W, WINDOW_H};
 SDL_Rect dstBg1 = {0, 0, BG_W, WINDOW_H};
 SDL_Rect dstBg2 = {BG_W, 0, BG_W, WINDOW_H};
+SDL_Rect bubbleDstRect = {0, 0, WINDOW_W, WINDOW_H};
 
 int ii, hitAreaY;
 int quantBlocks = 0;
@@ -204,6 +206,7 @@ void drawCharacter() {
   }
   if (gameFrame < RESET_FRAME) {
     SDL_RenderCopyEx(gRenderer, heroText, &srcRect, &dstRect, 0, NULL, SDL_FLIP_HORIZONTAL);
+    SDL_RenderCopyEx(gRenderer, dangerBubble, NULL, &bubbleDstRect, 0, NULL, SDL_FLIP_HORIZONTAL);
   } else {
     SDL_RenderCopy(gRenderer, heroText, &srcRect, &dstRect);
   }
@@ -597,6 +600,7 @@ void loadMedia() {
   heroText = loadTexture("assets/images/character-8.png");
   gHandSurface = loadTexture("assets/images/character-hand-2.png");
   warningBubble = loadTexture("assets/images/distanse-2.png");
+  stopBubble = loadTexture("assets/images/stop-2.png");
   dangerBubble = loadTexture("assets/images/danger-2.png");
 
   stageBackground = loadTexture("assets/images/zombie-grid-3.png");
@@ -1002,7 +1006,7 @@ void handleButtons() {
 
 void tick() {
   int i, j;
-  SDL_Rect bubbleDstRect = {0, hero.posY - HAND_H, WINDOW_W, WINDOW_H};
+  bubbleDstRect = (SDL_Rect){0, hero.posY - HAND_H, WINDOW_W, WINDOW_H};
 
   /* verifies if any key have been pressed */
   while (SDL_PollEvent(&e) != 0) {
@@ -1040,7 +1044,7 @@ void tick() {
     SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, warningAlpha);
     SDL_RenderFillRect(gRenderer, &warningDstRect);
     SDL_SetRenderDrawBlendMode(gRenderer, SDL_BLENDMODE_NONE);
-    SDL_RenderCopy(gRenderer, firstRow == 3 ? dangerBubble : warningBubble, NULL, &bubbleDstRect);
+    SDL_RenderCopy(gRenderer, firstRow == 3 ? stopBubble : warningBubble, NULL, &bubbleDstRect);
 
     warningFrame ++;
     if(warningFrame == 300) {
@@ -1167,6 +1171,8 @@ void tick() {
         dstBg2.x += 2;
         hero.posX += 2;
         handDstRect.x = hero.posX - 65;
+        bubbleDstRect.x = handDstRect.x - 800;
+
         for (i = 2; i < ROWS; i++) {
           for (j = 0; j < COLUMNS; j++) {
             block[i][j].posX += 2;
@@ -1197,6 +1203,7 @@ void tick() {
       } else if (gameFrame < RESET_FRAME) {
         hero.posX -= STEP_Y;
         handDstRect.x = hero.posX - 65;
+        bubbleDstRect.x = handDstRect.x - 800;
       } else if (gameFrame == RESET_FRAME) {
         reset();
         return;
