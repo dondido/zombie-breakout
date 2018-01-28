@@ -39,14 +39,14 @@
 
 #define HERO_W 80
 #define HERO_H 91
-#define WINDOW_WIDTH 960
-#define WINDOW_HEIGHT 540
+#define WINDOW_W 960
+#define WINDOW_H 540
 #define BUTTON_WIDTH 65 /* dimensions of Music and Sound button */
 #define BUTTON_HEIGHT 65
 #define MARGIN 10
 #define RESET_FRAME -HITAREA_W * 3
 #define ENEMY_OFFSET HITAREA_W - HITAREA_X
-#define FIELD_X WINDOW_WIDTH - 12
+#define FIELD_X WINDOW_W - 12
 #define STEP_Y 3
 
 typedef struct _TEXT_TEXTURE {
@@ -91,8 +91,8 @@ int aim = 0;
 double degrees = 0;
 
 double radians = 0;
-double ballX = 0;
-double ballY = 0;
+double bulletX = 0;
+double bulletY = 0;
 double sinRadians = 0;
 double cosRadians = 0;
 /* The window we'll be rendering to */
@@ -112,7 +112,7 @@ SDL_Renderer *gRenderer = NULL;
 /* The surface we'll be displaying the menu */
 SDL_Texture *mainMenu;
 SDL_Texture *gameTitle;
-/* Current displayed ball image */
+/* Current displayed bullet image */
 SDL_Texture *gHandSurface = NULL;
 /* block' surface */
 SDL_Texture *zombieLegs;
@@ -130,6 +130,7 @@ SDL_Texture *warningBubble;
 SDL_Texture *dangerBubble;
 /* bar's surface */
 SDL_Texture *heroText;
+SDL_Texture *extraBulletText;
 /*sounds */
 Mix_Chunk *hitSound;
 Mix_Chunk *destroySound;
@@ -140,14 +141,8 @@ Mix_Music *gameMusic;
 TTF_Font *font20;
 TTF_Font *font42;
 TTF_Font *font28;
-// SDL_Surface *gRankingText = NULL;
-SDL_Surface *gSettingsText = NULL;
-SDL_Surface *gMenuText = NULL;
 
 SDL_Texture *pauseButton;
-
-SDL_Rect dstBg1 = {0, 0, BG_W, WINDOW_HEIGHT};
-SDL_Rect dstBg2 = {BG_W, 0, BG_W, WINDOW_HEIGHT};
 
 TEXT_TEXTURE txtText1;
 TEXT_TEXTURE txtText2;
@@ -157,23 +152,24 @@ SDL_Texture *btnsText;
 SDL_Texture *sndOnText;
 SDL_Texture *mscOffText;
 // The color of the font
-SDL_Color textColor = {255, 255, 255};
+SDL_Color textColor = {255, 255, 255, 255};
 
 
-
-
-OBJECT *ball;
+OBJECT *bullet;
 OBJECT hero;
 SDL_Point aimPnt;
 ENEMY block[ROWS][COLUMNS];
-OBJECT balls[200];
+OBJECT bullets[200];
 SDL_Point handPnt = {0, HAND_H / 2};
 SDL_Rect handDstRect = {0, 0, HAND_W, HAND_H};
 SDL_Rect bulletRect = {0, 0, BULLET_SIDE, BULLET_SIDE};
+SDL_Rect warningDstRect = {0, 84, HITAREA_W, WINDOW_H};
+SDL_Rect dstBg1 = {0, 0, BG_W, WINDOW_H};
+SDL_Rect dstBg2 = {BG_W, 0, BG_W, WINDOW_H};
 
-int i, j, ii, hitAreaY;
+int ii, hitAreaY;
 int quantBlocks = 0;
-int bulletIconY = WINDOW_HEIGHT - MARGIN * 3 + BULLET_SIDE / 2;
+int bulletIconY = WINDOW_H - MARGIN * 3 + BULLET_SIDE / 2;
 int gameFrame = RESET_FRAME;
 int characterFrame = 0;
 int characterTime = 0;
@@ -190,11 +186,7 @@ int shotInterval = 0;
 int enemyInColumn = 0;
 int hasGameStarted = 0;
 int warningFrame = 0;
-
-SDL_Rect warningDstRect = {0, 84, HITAREA_W, WINDOW_HEIGHT};
 int warningAlpha = 15;
-
-
 
 void drawCharacter() {
   SDL_Rect srcRect = {characterFrame * HERO_W, 0, HERO_W, HERO_H};
@@ -257,7 +249,6 @@ void drawEnemy(ENEMY *block) {
   if (block->frame != 3) {
     SDL_RenderCopy(gRenderer, block->textTexture, NULL, &txtDstRect);
   }
-  
 }
 
 void setTextTexture(TEXT_TEXTURE *txtText, TTF_Font *font, char *text) {
@@ -283,7 +274,7 @@ void updateBullets(int n) {
   sprintf(bulletsText, "%d", n);
   setTextTexture(&txtText2, font20, bulletsText);
   txtText2.txtDstRect.x = MARGIN * 2 + BULLET_SIDE;
-  txtText2.txtDstRect.y = WINDOW_HEIGHT - MARGIN - txtText2.txtDstRect.h;
+  txtText2.txtDstRect.y = WINDOW_H - MARGIN - txtText2.txtDstRect.h;
 }
 
 void setZombieTextTexture(ENEMY *block) {
@@ -300,14 +291,14 @@ void setZombieTextTexture(ENEMY *block) {
   SDL_FreeSurface(textSurface);
 }
 
-void reflectX(OBJECT *ball) {
-  ball->stepX *= -1;
-  ball->posX += ball->stepX;
+void reflectX(OBJECT *bullet) {
+  bullet->stepX *= -1;
+  bullet->posX += bullet->stepX;
 }
 
-void reflectY(OBJECT *ball) {
-  ball->stepY *= -1;
-  ball->posY += ball->stepY;
+void reflectY(OBJECT *bullet) {
+  bullet->stepY *= -1;
+  bullet->posY += bullet->stepY;
 }
 
 void playSound(Mix_Chunk* sound) {
@@ -340,13 +331,13 @@ void damage(int row, int column) {
   updatePoints(1);
 }
 
-void collide(OBJECT *ball, int *quantBlocks) {
-  int movingRight = ball->stepX > 0;
-  int movingBottom = ball->stepY >= 0;
-  int left = ball->posX / HITAREA_W - 1;
-  int right = (ball->posX + BULLET_SIDE) / HITAREA_W - 1;
-  int top = ball->posY / ENEMY_H;
-  int bottom = (ball->posY + BULLET_SIDE) / ENEMY_H;
+void collide(OBJECT *bullet, int *quantBlocks) {
+  int movingRight = bullet->stepX > 0;
+  int movingBottom = bullet->stepY >= 0;
+  int left = bullet->posX / HITAREA_W - 1;
+  int right = (bullet->posX + BULLET_SIDE) / HITAREA_W - 1;
+  int top = bullet->posY / ENEMY_H;
+  int bottom = (bullet->posY + BULLET_SIDE) / ENEMY_H;
 
   if (COLUMNS == bottom) {
     bottom = top;
@@ -369,7 +360,7 @@ void collide(OBJECT *ball, int *quantBlocks) {
     }
     if (block[x1][top].resistance) {
       damage(x1, top);
-      reflectX(ball);
+      reflectX(bullet);
     }
   } else if (left == right) {
     if (movingBottom) {
@@ -377,7 +368,7 @@ void collide(OBJECT *ball, int *quantBlocks) {
     }
     if (block[left][y1].resistance) {
       damage(left, y1);
-      reflectY(ball);
+      reflectY(bullet);
     }
   } else if (top != bottom && left != right) {
     if (movingRight) {
@@ -391,18 +382,18 @@ void collide(OBJECT *ball, int *quantBlocks) {
     if (block[x1][y1].resistance) {
       damage(x1, y1);
       if (block[x2][y1].resistance == 0 && block[x1][y2].resistance == 0) {
-        reflectX(ball);
-        reflectY(ball);
+        reflectX(bullet);
+        reflectY(bullet);
         return;
       }
     }
     if (block[x2][y1].resistance) {
       damage(x2, y1);
-      reflectY(ball);
+      reflectY(bullet);
     }
     if (block[x1][y2].resistance) {
       damage(x1, y2);
-      reflectX(ball);
+      reflectX(bullet);
     }
   }
 }
@@ -433,6 +424,29 @@ void drawSprite(int x, int y, int armsSpriteY, int eyesSpriteX, int mouthSpriteX
   SDL_RenderCopy(gRenderer, zombieHair, &srcRect, &dstRect);
 }
 
+SDL_Texture *createEmptySprite(int w, int h) {
+  SDL_Texture *texture = SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
+  SDL_SetRenderTarget(gRenderer, texture);
+
+  // will make pixels with alpha 0 fully transparent
+  // use SDL_SetTextureBlendMode . Not SDL_SetRenderDrawBlendMode
+  SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+  return texture;
+}
+
+void createExtraBulletSprite(int w, int h) {
+  SDL_Rect bulletRect = {ENEMY_W * 3 + HITAREA_X + BULLET_SIDE, ENEMY_H / 2 + 4 + BULLET_SIDE, BULLET_SIDE, BULLET_SIDE};
+  extraBulletText = createEmptySprite(ENEMY_W * 4, ENEMY_H);
+
+  SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 255);
+  SDL_RenderFillRect(gRenderer, &bulletRect);
+  setTextTexture(&txtText3, font20, "+1");
+  txtText3.txtDstRect.x = ENEMY_W * 3 + BULLET_SIDE * 4;
+  txtText3.txtDstRect.y = ENEMY_H / 2 + BULLET_SIDE;
+  SDL_RenderCopy(gRenderer, txtText3.txtText, NULL, &txtText3.txtDstRect);
+  SDL_SetRenderTarget(gRenderer, NULL);
+}
+
 ENEMY createEnemy(int posX, int posY) {
   int hairSpriteY = ENEMY_H * (rand() % 5);
   int hairColour = rand() % 7;
@@ -443,32 +457,18 @@ ENEMY createEnemy(int posX, int posY) {
   int blinkSpriteX = ENEMY_W * 4;
   int mouthSpriteX = ENEMY_W * (rand() % 6);
 
-  SDL_Rect bulletRect = {ENEMY_W * 3 + HITAREA_X + BULLET_SIDE, ENEMY_H / 2 + 4 + BULLET_SIDE, BULLET_SIDE, BULLET_SIDE};
   int armsSpriteX = 2;
   ENEMY block = {1, 0, posX, posY, level + (rand() % 4) * 10 * (level / 10)};
 
   block.txtDstRect = (SDL_Rect){0, posY + ENEMY_H - 24, 0, 0};
   setZombieTextTexture(&block);
-
-  block.sprite =
-      SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_ARGB8888,
-                        SDL_TEXTUREACCESS_TARGET, ENEMY_W * 4, ENEMY_H);
-  SDL_SetRenderTarget(gRenderer, block.sprite);
-
-  // will make pixels with alpha 0 fully transparent
-  // use SDL_SetTextureBlendMode . Not SDL_SetRenderDrawBlendMode
-  SDL_SetTextureBlendMode(block.sprite, SDL_BLENDMODE_BLEND);
+  block.sprite = createEmptySprite(ENEMY_W * 4, ENEMY_H);
 
   drawSprite(0, 0, 0, eyesSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
   drawSprite(ENEMY_W, 3, armsSpriteX, eyesSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
   drawSprite(ENEMY_W * 2, 3, 0, blinkSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
 
-  SDL_SetRenderDrawColor/**/(gRenderer, 0xFF, 0x00, 0xFF, 255);
-  SDL_RenderFillRect(gRenderer, &bulletRect);
-  setTextTexture(&txtText3, font20, "+1");
-  txtText3.txtDstRect.x = ENEMY_W * 3 + BULLET_SIDE * 4;
-  txtText3.txtDstRect.y = ENEMY_H / 2 + BULLET_SIDE;
-  SDL_RenderCopy(gRenderer, txtText3.txtText, NULL, &txtText3.txtDstRect);
+  SDL_RenderCopy(gRenderer, extraBulletText, NULL, NULL);
 
   SDL_SetRenderTarget(gRenderer, NULL);
   return block;
@@ -485,7 +485,7 @@ int moveObject(OBJECT *p) {
     p->stepX = -p->stepX;
   }
 
-  if (p->posY + BULLET_SIDE > WINDOW_HEIGHT || p->posY < 0) {
+  if (p->posY + BULLET_SIDE > WINDOW_H || p->posY < 0) {
     p->stepY = -p->stepY;
   }
 
@@ -496,7 +496,7 @@ int moveObject(OBJECT *p) {
 }
 
 void moveHero(OBJECT *p) {
-  if ((p->posY + ENEMY_H >= WINDOW_HEIGHT && p->stepY > 0) ||
+  if ((p->posY + ENEMY_H >= WINDOW_H && p->stepY > 0) ||
       (p->posY < 0 && p->stepY < 0)) {
     p->stepY = 0;
   }
@@ -522,10 +522,7 @@ int init() {
     success = 0;
   } else {
     /*Create window*/
-    gWindow =
-        SDL_CreateWindow("Breakout game. Have fun!", SDL_WINDOWPOS_UNDEFINED,
-                         SDL_WINDOWPOS_UNDEFINED, WINDOW_WIDTH, WINDOW_HEIGHT,
-                         SDL_WINDOW_RESIZABLE);
+    gWindow = SDL_CreateWindow("ZOMBIE BREAKOUT", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_W, WINDOW_H, SDL_WINDOW_RESIZABLE);
     if (gWindow == NULL) {
       printf("Window could not be created! SDL Error: %s\n", SDL_GetError());
       success = 0;
@@ -627,38 +624,28 @@ void loadMedia() {
   font20 = TTF_OpenFont("assets/images/visitor1.ttf", 20);
   font28 = TTF_OpenFont("assets/images/visitor1.ttf", 28);
   font42 = TTF_OpenFont("assets/images/visitor1.ttf", 42);
-}
 
-SDL_Texture *createEmptySprite() {
-  SDL_Texture *texture =
-      SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_RGBA8888,
-                        SDL_TEXTUREACCESS_TARGET, WINDOW_WIDTH, WINDOW_HEIGHT);
-  SDL_SetRenderTarget(gRenderer, texture);
-
-  // will make pixels with alpha 0 fully transparent
-  // use SDL_SetTextureBlendMode . Not SDL_SetRenderDrawBlendMode
-  SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-  return texture;
+  createExtraBulletSprite(ENEMY_W * 4, ENEMY_H);
 }
 
 void renderXCenteredText(TTF_Font *font, char string[], int y) {
   setTextTexture(&txtText3, font, string);
-  txtText3.txtDstRect.x = (WINDOW_WIDTH - txtText3.txtDstRect.w) / 2;
+  txtText3.txtDstRect.x = (WINDOW_W - txtText3.txtDstRect.w) / 2;
   txtText3.txtDstRect.y = y;
   SDL_RenderCopy(gRenderer, txtText3.txtText, NULL, &txtText3.txtDstRect);
 }
 
 void showMarket() {
-  int textY = WINDOW_HEIGHT / 4;
-  scrnText = createEmptySprite();
+  int textY = WINDOW_H / 4;
+  scrnText = createEmptySprite(WINDOW_W, WINDOW_H);
   renderXCenteredText(font42, "MARKET", textY - 42 * 2);
   renderXCenteredText(font28, "Market is currently closed!", textY + 4 * 28);
   SDL_SetRenderTarget(gRenderer, NULL);
 }
 
 void showHelp() {
-  int textY = WINDOW_HEIGHT / 4;
-  scrnText = createEmptySprite();
+  int textY = WINDOW_H / 4;
+  scrnText = createEmptySprite(WINDOW_W, WINDOW_H);
   renderXCenteredText(font42, "HOW TO PLAY", textY - 42 * 2);
   renderXCenteredText(font28, "1. Point and tap to move you character.", textY + 2 * 28);
   renderXCenteredText(font28, "2. Tap and hold down to aim at the target.",  textY + 4 * 28);
@@ -676,10 +663,10 @@ void listRecords() {
   int empty = 1;
   char entry[50];
   char digits[7];
-  int textY = WINDOW_HEIGHT / 4;
+  int textY = WINDOW_H / 4;
   int i;
 
-  scrnText = createEmptySprite();
+  scrnText = createEmptySprite(WINDOW_W, WINDOW_H);
 
   renderXCenteredText(font42, "TOP RANKINGS", textY - 42 * 2);
 
@@ -714,14 +701,14 @@ int setRank() {
   PLAYER records[5];
   PLAYER aux;
   int i;
-  int textY = WINDOW_HEIGHT / 4;
+  int textY = WINDOW_H / 4;
   char pts[12] = "PTS: ";
   char timeStr[25];
   time_t t = time(NULL);
   struct tm *tm = localtime(&t);
 
   strcat(pts, pointsText);
-  scrnText = createEmptySprite();
+  scrnText = createEmptySprite(WINDOW_W, WINDOW_H);
   renderXCenteredText(font42, "GAME OVER", textY - 42 * 2);
   renderXCenteredText(font28, pts, textY + 4 * 28);
   SDL_SetRenderTarget(gRenderer, NULL);
@@ -775,8 +762,6 @@ void closing() {
   TTF_CloseFont(font20);
   font20 = NULL;
 
-  gMenuText = NULL;
-
   /* Free bar image */
   // SDL_FreeSurface(heroText);
   heroText = NULL;
@@ -806,7 +791,7 @@ void closing() {
 }
 
 void updateMenuTexture() {
-  btnsText = createEmptySprite();
+  btnsText = createEmptySprite(WINDOW_W, WINDOW_H);
   if (gSoundCondition) {
     SDL_RenderCopy(gRenderer, sndOnText, NULL, NULL);
   }
@@ -858,8 +843,8 @@ void setAngle() {
   sinRadians = sin(maxRadians);
   cosRadians = cos(maxRadians);
 
-  ballY = sinRadians * BULLET_SPEED;
-  ballX = cosRadians * BULLET_SPEED;
+  bulletY = sinRadians * BULLET_SPEED;
+  bulletX = cosRadians * BULLET_SPEED;
 }
 
 SDL_Point getRulerCorners(int pvtX, int pvtY, int ox, int oy) {
@@ -875,9 +860,9 @@ SDL_Point getRulerCorners(int pvtX, int pvtY, int ox, int oy) {
 }
 
 void reset() {
- 
+  int i, j;
   quantBlocks = 0;
-  hero = (OBJECT){-HITAREA_W - 45, WINDOW_HEIGHT / 2 - HERO_W / 2, 0, 0};
+  hero = (OBJECT){-HITAREA_W - 45, WINDOW_H / 2 - HERO_W / 2, 0, 0};
   //gameFrame = RESET_FRAME;
   characterFrame = 0;
   characterTime = 0;
@@ -898,10 +883,9 @@ void reset() {
 
   gPausedGame = 0;
 
-  dstPauseButton = (SDL_Rect){WINDOW_WIDTH - BUTTON_WIDTH - MARGIN, MARGIN, BUTTON_WIDTH, BUTTON_HEIGHT};
+  dstPauseButton = (SDL_Rect){WINDOW_W - BUTTON_WIDTH - MARGIN, MARGIN, BUTTON_WIDTH, BUTTON_HEIGHT};
 
   scrnText = NULL;
-
 
   updatePoints(gPoints);
   updateMenuTexture();
@@ -927,7 +911,7 @@ void reset() {
 }
 
 void handleButtons() {
-  SDL_Rect playDstRect = {WINDOW_WIDTH / 2 - 84 / 2, WINDOW_HEIGHT - 100, 84, 84};
+  SDL_Rect playDstRect = {WINDOW_W / 2 - 84 / 2, WINDOW_H - 100, 84, 84};
   SDL_Rect exitDstRect = {208, 457, BUTTON_WIDTH, BUTTON_HEIGHT};
   SDL_Rect sndDstRect = {296, 457, BUTTON_WIDTH, BUTTON_HEIGHT};
   SDL_Rect mscDstRect = {384, 457, BUTTON_WIDTH, BUTTON_HEIGHT};
@@ -986,7 +970,7 @@ void handleButtons() {
         if (hasGameStarted == 0 && scrnText == NULL) {
           gQuit = 1;
         } else if (hasGameStarted == 1 && gPausedGame) {
-          gameFrame = -WINDOW_WIDTH;
+          gameFrame = -WINDOW_W;
           setRank();
         }
         break;
@@ -1017,8 +1001,8 @@ void handleButtons() {
 }
 
 void tick() {
-
-  SDL_Rect bubbleDstRect = {0, hero.posY - HAND_H, WINDOW_WIDTH, WINDOW_HEIGHT};
+  int i, j;
+  SDL_Rect bubbleDstRect = {0, hero.posY - HAND_H, WINDOW_W, WINDOW_H};
 
   /* verifies if any key have been pressed */
   while (SDL_PollEvent(&e) != 0) {
@@ -1104,12 +1088,12 @@ void tick() {
         }
       } else if (gameFrame < shotInterval) {
         if (gameFrame % BULLET_GAP == 0) {
-          ball = &balls[gameFrame / BULLET_GAP - 1];
+          bullet = &bullets[gameFrame / BULLET_GAP - 1];
           aimPnt = getRulerCorners(handDstRect.x, handPvtPntY, handDstRect.w, -12);
-          ball->posY = aimPnt.y;
-          ball->posX = aimPnt.x;
-          ball->stepY = ballY;
-          ball->stepX = ballX;
+          bullet->posY = aimPnt.y;
+          bullet->posX = aimPnt.x;
+          bullet->stepY = bulletY;
+          bullet->stepX = bulletX;
           updateBullets(bulletsLoaded - gameFrame / BULLET_GAP);
           playSound(laserSound);
         }
@@ -1118,11 +1102,11 @@ void tick() {
 
       if (gameFrame > 2) {
         for (ii = 0; ii < bulletsLoaded; ii++) {
-          bulletsInTheMagazine += moveObject(&balls[ii]);
-          if (balls[ii].posX > 0) {
-            collide(&balls[ii], &quantBlocks);
-            bulletRect.x = balls[ii].posX;
-            bulletRect.y = balls[ii].posY;
+          bulletsInTheMagazine += moveObject(&bullets[ii]);
+          if (bullets[ii].posX > 0) {
+            collide(&bullets[ii], &quantBlocks);
+            bulletRect.x = bullets[ii].posX;
+            bulletRect.y = bullets[ii].posY;
             SDL_RenderFillRect(gRenderer, &bulletRect);
           }
         }
@@ -1188,10 +1172,10 @@ void tick() {
             block[i][j].posX += 2;
           }
         }
-        if (dstBg1.x > WINDOW_WIDTH - BG_W) {
+        if (dstBg1.x > WINDOW_W - BG_W) {
           dstBg2.x = dstBg1.x - BG_W;
         }
-        if (dstBg2.x > WINDOW_WIDTH - BG_W) {
+        if (dstBg2.x > WINDOW_W - BG_W) {
           dstBg1.x = dstBg2.x - BG_W;
         }
       }
