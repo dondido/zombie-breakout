@@ -126,6 +126,8 @@ SDL_Texture *zombieArms;
 SDL_Texture *zombieMouth;
 SDL_Texture *zombieTorso;
 SDL_Texture *stageBackground;
+SDL_Texture *warningBubble;
+SDL_Texture *dangerBubble;
 /* bar's surface */
 SDL_Texture *heroText;
 /*sounds */
@@ -176,7 +178,7 @@ int gameFrame = RESET_FRAME;
 int characterFrame = 0;
 int characterTime = 0;
 int handPvtPntY = 0;
-
+int firstRow = 0;
 
 int level = 1;
 int bulletsLoaded = 1;
@@ -187,8 +189,10 @@ int bulletsInTheMagazine = 0;
 int shotInterval = 0;
 int enemyInColumn = 0;
 int hasGameStarted = 0;
+int warningFrame = 0;
 
-
+SDL_Rect warningDstRect = {0, 84, HITAREA_W, WINDOW_HEIGHT};
+int warningAlpha = 15;
 
 
 
@@ -459,7 +463,7 @@ ENEMY createEnemy(int posX, int posY) {
   drawSprite(ENEMY_W, 3, armsSpriteX, eyesSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
   drawSprite(ENEMY_W * 2, 3, 0, blinkSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
 
-  /**/SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 255);
+  SDL_SetRenderDrawColor/**/(gRenderer, 0xFF, 0x00, 0xFF, 255);
   SDL_RenderFillRect(gRenderer, &bulletRect);
   setTextTexture(&txtText3, font20, "+1");
   txtText3.txtDstRect.x = ENEMY_W * 3 + BULLET_SIDE * 4;
@@ -595,6 +599,8 @@ void loadMedia() {
   /* load bar surface */
   heroText = loadTexture("assets/images/character-8.png");
   gHandSurface = loadTexture("assets/images/character-hand-2.png");
+  warningBubble = loadTexture("assets/images/distanse-2.png");
+  dangerBubble = loadTexture("assets/images/danger-2.png");
 
   stageBackground = loadTexture("assets/images/zombie-grid-3.png");
 
@@ -608,13 +614,13 @@ void loadMedia() {
   zombieArms = loadTexture("assets/images/zombie-arms-2.png");
   zombieMouth = loadTexture("assets/images/zombie-mouth-2.png");
 
-  /*load sounds 
+  /*load sounds */
   hitSound = Mix_LoadWAV("assets/sounds/hit.wav");
   destroySound = Mix_LoadWAV("assets/sounds/destroy.wav");
   laserSound = Mix_LoadWAV("assets/sounds/laser.wav");
   extraSound = Mix_LoadWAV("assets/sounds/extra.wav");
   gameMusic = Mix_LoadMUS("assets/sounds/music.mp3");
-  */
+  
 
   /*load fonts*/
   // TTF_Font *font;
@@ -632,32 +638,6 @@ SDL_Texture *createEmptySprite() {
   // will make pixels with alpha 0 fully transparent
   // use SDL_SetTextureBlendMode . Not SDL_SetRenderDrawBlendMode
   SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-  return texture;
-}
-
-SDL_Texture *createExtraBulletSprite() {
-  SDL_Rect bulletRect = {0, WINDOW_HEIGHT - ENEMY_H / 2, BULLET_SIDE, BULLET_SIDE};
-  SDL_Texture *texture =
-      SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_RGBA8888,
-                        SDL_TEXTUREACCESS_TARGET, ENEMY_W, WINDOW_HEIGHT * 2 - ENEMY_H * 2);
-  SDL_SetRenderTarget(gRenderer, texture);
-
-  // will make pixels with alpha 0 fully transparent
-  // use SDL_SetTextureBlendMode . Not SDL_SetRenderDrawBlendMode
-  SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-
-  SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
-  SDL_RenderDrawLine(gRenderer, 0, 0, 0, WINDOW_HEIGHT - ENEMY_H);
-  SDL_RenderDrawLine(gRenderer, 0, WINDOW_HEIGHT, 0, WINDOW_HEIGHT * 2 - ENEMY_H * 2);
-  SDL_RenderFillRect(gRenderer, &bulletRect);
-
-  setTextTexture(&txtText3, font20, "+1");
-  txtText3.txtDstRect.x = ENEMY_W / 2 + BULLET_SIDE * 2;
-  txtText3.txtDstRect.y = WINDOW_HEIGHT - ENEMY_H / 2;
-  SDL_RenderCopy(gRenderer, txtText3.txtText, NULL, &txtText3.txtDstRect);
-
-  SDL_SetRenderTarget(gRenderer, NULL);
-
   return texture;
 }
 
@@ -1037,17 +1017,57 @@ void handleButtons() {
 }
 
 void tick() {
+
+  SDL_Rect bubbleDstRect = {0, hero.posY - HAND_H, WINDOW_WIDTH, WINDOW_HEIGHT};
+
   /* verifies if any key have been pressed */
   while (SDL_PollEvent(&e) != 0) {
     handleButtons();
   }
 
   SDL_RenderClear(gRenderer);
-  SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 0);
   SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg1);
   SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg2);
+
+  if(firstRow) {
+    if(gameFrame < 0) {
+      warningDstRect.x --;
+    }
+    if(warningFrame == 570) {
+      warningAlpha = 15;
+    }
+    else if(warningFrame == 10 || warningFrame == 290) {
+      warningAlpha = 30;
+    }
+    else if(warningFrame == 20 || warningFrame == 280) {
+      warningAlpha = 45;
+    }
+    else if(warningFrame == 30 || warningFrame == 270) {
+      warningAlpha = 60;
+    }
+    else if(warningFrame == 40 || warningFrame == 260) {
+      warningAlpha = 75;
+    }
+    else if(warningFrame == 50) {
+      warningAlpha = 90;
+    }
+    
+    SDL_SetRenderDrawBlendMode(gRenderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, warningAlpha);
+    SDL_RenderFillRect(gRenderer, &warningDstRect);
+    SDL_SetRenderDrawBlendMode(gRenderer, SDL_BLENDMODE_NONE);
+    SDL_RenderCopy(gRenderer, firstRow == 3 ? dangerBubble : warningBubble, NULL, &bubbleDstRect);
+
+    warningFrame ++;
+    if(warningFrame == 300) {
+      firstRow = warningFrame = 0;
+    }
+  }
+
+  SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 255);
+
   for (j = 0; j < COLUMNS; j++) {
-    for (i = 0; i < ROWS; i++) {
+    for (i = 2; i < ROWS; i++) {
       if (block[i][j].time) {
         drawEnemy(&block[i][j]);
       }
@@ -1112,13 +1132,13 @@ void tick() {
         if (bulletsInTheMagazine == bulletsLoaded) {
           for (j = 0; j < COLUMNS; j++) {
             if (block[2][j].resistance) {
-              gameFrame = -WINDOW_WIDTH;
-              Mix_FadeOutMusic(WINDOW_WIDTH * 2);
+              gameFrame = -1000;
+              Mix_FadeOutMusic(1000 * 2);
               setRank();
               break;
             };
           }
-          if (gameFrame != -WINDOW_WIDTH) {
+          if (gameFrame != -1000) {
             gameFrame = -HITAREA_W - 1;
             shotInterval = 0;
             for (i = 1; i < ROWS; i++) {
@@ -1134,6 +1154,10 @@ void tick() {
               }
               if (lastKilled && killedInColumn == COLUMNS) {
                 bulletsLoaded++;
+              }
+              if(firstRow == 0 && killedInColumn != COLUMNS && i < 5){
+                firstRow = i;
+                warningDstRect.x = (i + 1) * HITAREA_W;
               }
               killedInColumn = 0;
               lastKilled = 0;
@@ -1159,7 +1183,7 @@ void tick() {
         dstBg2.x += 2;
         hero.posX += 2;
         handDstRect.x = hero.posX - 65;
-        for (i = 0; i < ROWS; i++) {
+        for (i = 2; i < ROWS; i++) {
           for (j = 0; j < COLUMNS; j++) {
             block[i][j].posX += 2;
           }
@@ -1181,7 +1205,7 @@ void tick() {
         if (dstBg2.x < 0) {
           dstBg1.x = dstBg2.x + BG_W;
         }
-        for (i = 0; i < ROWS; i++) {
+        for (i = 2; i < ROWS; i++) {
           for (j = 0; j < COLUMNS; j++) {
             block[i][j].posX--;
           }
@@ -1201,6 +1225,7 @@ void tick() {
       updateBullets(bulletsLoaded);
       gameFrame++;
     }
+   
   }
 
   moveHero(&hero);
