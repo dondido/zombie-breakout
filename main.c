@@ -88,6 +88,8 @@ int gPausedGame = 0;
 int gHeroNewY = 0;
 int isMouseDown = 0;
 int aim = 0;
+int mouseX = 0;
+int mouseY = 0;
 double degrees = 0;
 
 double radians = 0;
@@ -115,6 +117,7 @@ SDL_Texture *gameTitle;
 /* Current displayed bullet image */
 SDL_Texture *gHandSurface = NULL;
 /* block' surface */
+SDL_Texture *canvas;
 SDL_Texture *zombieLegs;
 SDL_Texture *zombiePants;
 SDL_Texture *zombieBody;
@@ -447,7 +450,7 @@ void createExtraBulletSprite(int w, int h) {
   txtText3.txtDstRect.x = ENEMY_W * 3 + BULLET_SIDE * 4;
   txtText3.txtDstRect.y = ENEMY_H / 2 + BULLET_SIDE;
   SDL_RenderCopy(gRenderer, txtText3.txtText, NULL, &txtText3.txtDstRect);
-  SDL_SetRenderTarget(gRenderer, NULL);
+  SDL_SetRenderTarget(gRenderer, canvas);
 }
 
 ENEMY createEnemy(int posX, int posY) {
@@ -473,7 +476,7 @@ ENEMY createEnemy(int posX, int posY) {
 
   SDL_RenderCopy(gRenderer, extraBulletText, NULL, NULL);
 
-  SDL_SetRenderTarget(gRenderer, NULL);
+  SDL_SetRenderTarget(gRenderer, canvas);
   return block;
 }
 
@@ -533,12 +536,9 @@ int init() {
       // Create renderer for window
       gRenderer = SDL_CreateRenderer(gWindow, -1, SDL_RENDERER_ACCELERATED);
       if (gRenderer == NULL) {
-        printf("Renderer could not be created! SDL Error: %s\n",
-               SDL_GetError());
+        printf("Renderer could not be created! SDL Error: %s\n", SDL_GetError());
         success = 0;
       } else {
-        // Initialize renderer color
-        SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
 
         // Initialize PNG loading
         int imgFlags = IMG_INIT_PNG;
@@ -644,7 +644,7 @@ void showMarket() {
   scrnText = createEmptySprite(WINDOW_W, WINDOW_H);
   renderXCenteredText(font42, "MARKET", textY - 42 * 2);
   renderXCenteredText(font28, "Market is currently closed!", textY + 4 * 28);
-  SDL_SetRenderTarget(gRenderer, NULL);
+  SDL_SetRenderTarget(gRenderer, canvas);
 }
 
 void showHelp() {
@@ -655,7 +655,7 @@ void showHelp() {
   renderXCenteredText(font28, "2. Tap and hold down to aim at the target.",  textY + 4 * 28);
   renderXCenteredText(font28, "3. Release to shoot.", textY + 6 * 28);
   renderXCenteredText(font28, "4. Defend the city against hordes of zombies.", textY + 8 * 28);
-  SDL_SetRenderTarget(gRenderer, NULL);
+  SDL_SetRenderTarget(gRenderer, canvas);
 }
 
 #if __EMSCRIPTEN__
@@ -696,7 +696,7 @@ void listRecords() {
   if (empty) {
     renderXCenteredText(font28, "No records found!", textY + 4 * 28);
   }
-  SDL_SetRenderTarget(gRenderer, NULL);
+  SDL_SetRenderTarget(gRenderer, canvas);
 }
 
 int setRank() {
@@ -715,7 +715,7 @@ int setRank() {
   scrnText = createEmptySprite(WINDOW_W, WINDOW_H);
   renderXCenteredText(font42, "GAME OVER", textY - 42 * 2);
   renderXCenteredText(font28, pts, textY + 4 * 28);
-  SDL_SetRenderTarget(gRenderer, NULL);
+  SDL_SetRenderTarget(gRenderer, canvas);
 
   gPausedGame = 0;
 
@@ -802,7 +802,7 @@ void updateMenuTexture() {
   if (!gMusicCondition) {
     SDL_RenderCopy(gRenderer, mscOffText, NULL, NULL);
   }
-  SDL_SetRenderTarget(gRenderer, NULL);
+  SDL_SetRenderTarget(gRenderer, canvas);
 }
 
 void switchSound() {
@@ -816,8 +816,8 @@ void switchMusic() {
 }
 
 int clickButton(SDL_Event e, SDL_Rect button) {
-  return e.motion.x >= button.x && e.motion.x <= button.x + button.w &&
-         e.motion.y >= button.y && e.motion.y <= button.y + button.h;
+  return mouseX >= button.x && mouseX <= button.x + button.w &&
+         mouseY >= button.y && mouseY <= button.y + button.h;
 }
 
 void playMusic() {
@@ -832,7 +832,7 @@ void playMusic() {
 
 void setAngle() {
   double maxRadians = 0;
-  radians = atan2(e.motion.y - handDstRect.y - handDstRect.h / 2, e.motion.x - handDstRect.x);
+  radians = atan2(mouseY - handDstRect.y - handDstRect.h / 2, mouseX - handDstRect.x);
 
   degrees = radians * STRAIGHT_ANGLE / PI;
   aim = 1;
@@ -901,7 +901,7 @@ void reset() {
     }
   }
   for (j = 0; j < COLUMNS; j++) {
-    if (rand() % 3 == 0) {
+    if (rand() % 15 == 0) {
       block[ROWS - 1][j] = createEnemy(HITAREA_W * ROWS, ENEMY_H * j);
       quantBlocks++;
     } else {
@@ -909,9 +909,16 @@ void reset() {
     }
   }
   if(quantBlocks == 0) {
-    block[rand() % 6][j] = createEnemy(HITAREA_W * ROWS, ENEMY_H * j);
-      quantBlocks++;
+    block[rand() % 5][j] = createEnemy(HITAREA_W * ROWS, ENEMY_H * j);
+    quantBlocks++;
   }
+}
+
+void interpolate() {
+  int w, h;
+  SDL_GetWindowSize(gWindow, &w, &h);
+  mouseX = (float)(WINDOW_W) / w * e.motion.x;
+  mouseY = (float)(WINDOW_H) / h * e.motion.y;
 }
 
 void handleButtons() {
@@ -923,12 +930,13 @@ void handleButtons() {
   SDL_Rect marketDstRect = {616, 457, BUTTON_WIDTH, BUTTON_HEIGHT};
   SDL_Rect helpDstRect = {694, 457, BUTTON_WIDTH, BUTTON_HEIGHT};
 
-  if (gPausedGame == 0 && hasGameStarted) {
-    switch (e.type) {
-      case SDL_QUIT:
-        gQuit = 1;
-        break;
-      case SDL_MOUSEBUTTONDOWN:  // if the event is mouse click
+  switch (e.type) {
+    case SDL_QUIT:
+      gQuit = 1;
+      break;
+    case SDL_MOUSEBUTTONDOWN:  // if the event is mouse click
+      interpolate();
+      if (gPausedGame == 0 && hasGameStarted) {
         if (clickButton(e, dstPauseButton)) {
           gPausedGame = 1;
           if (gMusicCondition) {
@@ -936,8 +944,8 @@ void handleButtons() {
           }
           break;
         }
-        if (e.motion.x < 120 && (gameFrame == shotInterval || gameFrame < 2)) {
-          gHeroNewY = e.motion.y - HERO_HAND_Y;
+        if (mouseX < 120 && (gameFrame == shotInterval || gameFrame < 2)) {
+          gHeroNewY = mouseY - HERO_HAND_Y;
           hero.stepY = gHeroNewY > hero.posY ? STEP_Y : -STEP_Y;
 
           characterTime = 1;
@@ -949,27 +957,17 @@ void handleButtons() {
           isMouseDown = 1;
           gameFrame = 2;
         }
-        break;
-      case SDL_MOUSEBUTTONUP:
-        if (e.motion.x < 110 && (gameFrame == 2 || gameFrame == 0)) {
+      }
+      break;
+    case SDL_MOUSEBUTTONUP:
+      interpolate();
+      if (gPausedGame == 0 && hasGameStarted) {
+        if (mouseX < 110 && (gameFrame == 2 || gameFrame == 0)) {
           gameFrame = 1;
         }
         isMouseDown = 0;
         break;
-      case SDL_MOUSEMOTION:
-        if (isMouseDown == 1) {
-          setAngle();
-        }
-        break;
-    }
-    return;
-  }
-
-  switch (e.type) {
-    case SDL_QUIT:
-      gQuit = 1;
-      break;
-    case SDL_MOUSEBUTTONUP:
+      }
       if (clickButton(e, exitDstRect)) {
         if (hasGameStarted == 0 && scrnText == NULL) {
           gQuit = 1;
@@ -1001,7 +999,14 @@ void handleButtons() {
         }
       }
       break;
+    case SDL_MOUSEMOTION:
+      interpolate();
+      if (isMouseDown == 1) {
+        setAngle();
+      }
+      break;
   }
+
 }
 
 void tick() {
@@ -1014,6 +1019,7 @@ void tick() {
   }
 
   SDL_RenderClear(gRenderer);
+  canvas = createEmptySprite(WINDOW_W, WINDOW_H);
   SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg1);
   SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg2);
 
@@ -1082,7 +1088,7 @@ void tick() {
           // the coordinates of Y in world coordinates
           handPvtPntY = handDstRect.y + handDstRect.h / 2;
           aimPnt = getRulerCorners(handDstRect.x, handPvtPntY, handDstRect.w / 2, -2);
-          SDL_RenderDrawLine(gRenderer, aimPnt.x, aimPnt.y, e.motion.x, e.motion.y);
+          SDL_RenderDrawLine(gRenderer, aimPnt.x, aimPnt.y, mouseX, mouseY);
           SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
 
           if (isMouseDown == 0) {
@@ -1256,6 +1262,9 @@ void tick() {
     }
   }
 
+  SDL_SetRenderTarget(gRenderer, NULL);
+  SDL_RenderCopy(gRenderer, canvas, NULL, NULL);
+  SDL_DestroyTexture(canvas);
   SDL_RenderPresent(gRenderer);
 }
 
