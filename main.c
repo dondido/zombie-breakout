@@ -140,7 +140,7 @@ Mix_Chunk *hitSound;
 Mix_Chunk *destroySound;
 Mix_Chunk *extraSound;
 Mix_Chunk *laserSound;
-Mix_Music *gameMusic;
+Mix_Chunk *gameMusic;
 /* fonts */
 TTF_Font *font20;
 TTF_Font *font42;
@@ -557,9 +557,6 @@ int init() {
                IMG_GetError());
         success = 0;
       }
-      if( Mix_OpenAudio( 22050, MIX_DEFAULT_FORMAT, 2, 4096 ) == -1 ) {
-        success = 0;
-      }
     }
   }
   return success;
@@ -587,6 +584,23 @@ SDL_Texture *loadTexture(char *path) {
   }
 
   return newTexture;
+}
+
+Mix_Chunk *loadWAV(const char *filepath) {
+  SDL_RWops *fileData = SDL_RWFromFile(filepath, "rb");
+  if(!fileData) {
+    printf("SDL_RWFromFile: %s\n", SDL_GetError());
+    return NULL;
+  }
+  
+  Mix_Chunk *chunk = Mix_LoadWAV_RW(fileData, 1);
+  if(!chunk){
+    printf("Mix_LoadWAV_RW: %s\n", Mix_GetError());
+    SDL_FreeRW(fileData);
+    return NULL;
+  }
+  
+  return chunk;
 }
 
 void loadMedia() {
@@ -617,11 +631,11 @@ void loadMedia() {
   zombieMouth = loadTexture("assets/images/zombie-mouth-2.png");
 
   /*load sounds */
-  /*hitSound = Mix_LoadWAV("assets/sounds/hit.wav");
-  destroySound = Mix_LoadWAV("assets/sounds/destroy.wav");
-  laserSound = Mix_LoadWAV("assets/sounds/laser.wav");
-  extraSound = Mix_LoadWAV("assets/sounds/extra.wav");
-  gameMusic = Mix_LoadMUS("assets/sounds/music.mp3");*/
+  hitSound = loadWAV("assets/sounds/hit.ogg");
+  destroySound = loadWAV("assets/sounds/destroy.ogg");
+  laserSound = loadWAV("assets/sounds/laser.ogg");
+  extraSound = loadWAV("assets/sounds/extra.ogg");
+  gameMusic = loadWAV("assets/sounds/music.ogg");
   
 
   /*load fonts*/
@@ -659,10 +673,6 @@ void showHelp() {
   SDL_SetRenderTarget(gRenderer, canvas);
 }
 
-#if __EMSCRIPTEN__
-void listRecords() {}
-void setRank() {}
-#else
 void listRecords() {
   PLAYER records[5];
   int empty = 1;
@@ -676,7 +686,7 @@ void listRecords() {
   renderXCenteredText(font42, "TOP RANKINGS", textY - 42 * 2);
 
   FILE *file = fopen("records.bin", "r");
-  if (!file) {
+  if (file == NULL) {
     printf("Failed to read ranking.\n");
     gQuit = 1;
   }
@@ -757,7 +767,6 @@ int setRank() {
   }
   return 1;
 }
-#endif
 
 void closing() {
   // SDL_FreeSurface(mainMenu);
@@ -782,7 +791,7 @@ void closing() {
   /*Free sounds */
   Mix_FreeChunk(hitSound);
   Mix_FreeChunk(destroySound);
-  Mix_FreeMusic(gameMusic);
+  Mix_FreeChunk(gameMusic);
 
   // Close the font that was used
   TTF_CloseFont(font20);
@@ -823,10 +832,10 @@ int clickButton(SDL_Event e, SDL_Rect button) {
 
 void playMusic() {
   if (gMusicCondition) {
-    if (Mix_PausedMusic()) {
-      Mix_ResumeMusic();
+    if (Mix_Paused(1)) {
+      Mix_Resume(1);
     } else {
-      Mix_PlayMusic(gameMusic, -1);
+      Mix_PlayChannel(1, gameMusic, -1);
     }
   }
 }
@@ -1121,7 +1130,7 @@ void tick() {
           for (j = 0; j < COLUMNS; j++) {
             if (block[2][j].resistance) {
               gameFrame = -1000;
-              Mix_FadeOutMusic(1000 * 2);
+              Mix_FadeOutChannel(1, 1000 * 2);
               setRank();
               break;
             };
@@ -1167,7 +1176,6 @@ void tick() {
     } else if (gameFrame < -1) {
       gameFrame++;
       if (gameFrame < -600) {
-        printf("game frame%d\n", gameFrame);
         dstBg1.x += 2;
         dstBg2.x += 2;
         hero.posX += 2;
@@ -1222,7 +1230,6 @@ void tick() {
 
   moveHero(&hero);
 
-  //characterTime++;
   handDstRect.y = hero.posY + 35;
 
   if (gameFrame < RESET_FRAME) {
