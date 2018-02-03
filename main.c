@@ -41,9 +41,10 @@
 #define HERO_H 91
 #define WINDOW_W 960
 #define WINDOW_H 540
-#define BUTTON_WIDTH 65 /* dimensions of Music and Sound button */
+#define BUTTON_WIDTH 65
 #define BUTTON_HEIGHT 65
 #define MARGIN 10
+#define SPRITE_W WINDOW_W - 1
 #define RESET_FRAME -HITAREA_W * 3
 #define ENEMY_OFFSET HITAREA_W - HITAREA_X
 #define FIELD_X WINDOW_W - 12
@@ -73,10 +74,10 @@ typedef struct _ENEMY {
   SDL_Rect txtDstRect;
 } ENEMY;
 
-typedef struct _PLAYER {
+typedef struct _RECORD {
   int points;
   char name[25];
-} PLAYER;
+} RECORD;
 
 int gQuit = 0;
 int gPoints;
@@ -173,7 +174,6 @@ SDL_Rect dstBg2 = {BG_W, 0, BG_W, WINDOW_H};
 SDL_Rect bubbleDstRect = {0, 0, WINDOW_W, WINDOW_H};
 
 int ii, hitAreaY;
-int quantBlocks = 0;
 int bulletIconY = WINDOW_H - MARGIN * 3 + BULLET_SIDE / 2;
 int gameFrame = RESET_FRAME;
 int characterFrame = 0;
@@ -322,7 +322,6 @@ void damage(int row, int column) {
   
   if (b->resistance == 0) {
     for (j = 0; j < COLUMNS; j++) {
-      printf("all dead %d %d %d\n", row, j, block[row][j].resistance);
       if(block[row][j].resistance > 0) {
         allDead = 0;
       }
@@ -338,7 +337,7 @@ void damage(int row, int column) {
   updatePoints(1);
 }
 
-void collide(OBJECT *bullet, int *quantBlocks) {
+void collide(OBJECT *bullet) {
   int movingRight = bullet->stepX > 0;
   int movingBottom = bullet->stepY >= 0;
   int left = bullet->posX / HITAREA_W - 1;
@@ -656,7 +655,7 @@ void renderXCenteredText(TTF_Font *font, char string[], int y) {
 
 void showMarket() {
   int textY = WINDOW_H / 4;
-  scrnText = createEmptySprite(WINDOW_W, WINDOW_H);
+  scrnText = createEmptySprite(SPRITE_W, WINDOW_H);
   renderXCenteredText(font42, "MARKET", textY - 42 * 2);
   renderXCenteredText(font28, "Market is currently closed!", textY + 4 * 28);
   SDL_SetRenderTarget(gRenderer, canvas);
@@ -664,7 +663,7 @@ void showMarket() {
 
 void showHelp() {
   int textY = WINDOW_H / 4;
-  scrnText = createEmptySprite(WINDOW_W, WINDOW_H);
+  scrnText = createEmptySprite(SPRITE_W, WINDOW_H);
   renderXCenteredText(font42, "HOW TO PLAY", textY - 42 * 2);
   renderXCenteredText(font28, "1. Point and tap to move you character.", textY + 2 * 28);
   renderXCenteredText(font28, "2. Tap and hold down to aim at the target.",  textY + 4 * 28);
@@ -674,48 +673,45 @@ void showHelp() {
 }
 
 void listRecords() {
-  PLAYER records[5];
+  int i;
+  RECORD records[5];
+  FILE *file = fopen("records.bin","rb");
   int empty = 1;
   char entry[50];
   char digits[7];
   int textY = WINDOW_H / 4;
-  int i;
 
-  scrnText = createEmptySprite(WINDOW_W, WINDOW_H);
-
+  scrnText = createEmptySprite(SPRITE_W, WINDOW_H);
   renderXCenteredText(font42, "TOP RANKINGS", textY - 42 * 2);
 
-  FILE *file = fopen("records.bin", "r");
-  if (file == NULL) {
-    printf("Failed to read ranking.\n");
-    gQuit = 1;
-  }
-  fread(records, sizeof(PLAYER), 5, file);
-
-  for (i = 0; i < 5; i++) {
-    if (records[i].points > 0) {
-      empty = 0;
-      // memset(entry, 0, sizeof entry);
-      strcpy(entry, records[i].name);
-      strcat(entry, " pts: ");
-      // counts number of digits in an int
-      sprintf(digits, "%d", records[i].points);
-      strcat(entry, digits);
-      renderXCenteredText(font28, entry, textY + i * 2 * 28);
+  if(file) {
+    fread(records, sizeof(RECORD), 5, file);
+    for (i = 0; i < 5; i++) {
+      if (records[i].points > 0) {
+        empty = 0;
+        strcpy(entry, records[i].name);
+        strcat(entry, " pts: ");
+        // counts number of digits in an int
+        sprintf(digits, "%d", records[i].points);
+        strcat(entry, digits);
+        renderXCenteredText(font28, entry, textY + i * 2 * 28);
+      }
     }
+    fclose(file);
   }
+
   if (empty) {
     renderXCenteredText(font28, "No records found!", textY + 4 * 28);
   }
   SDL_SetRenderTarget(gRenderer, canvas);
 }
 
-int setRank() {
-  FILE *pRankFile;
-  PLAYER player;
-  PLAYER records[5];
-  PLAYER aux;
-  int i;
+void setRank() {
+  FILE *file = fopen("records.bin", "rb");
+  RECORD player;
+  RECORD records[5];
+  RECORD aux;
+  int i = 0;
   int textY = WINDOW_H / 4;
   char pts[12] = "PTS: ";
   char timeStr[25];
@@ -723,7 +719,7 @@ int setRank() {
   struct tm *tm = localtime(&t);
 
   strcat(pts, pointsText);
-  scrnText = createEmptySprite(WINDOW_W, WINDOW_H);
+  scrnText = createEmptySprite(SPRITE_W, WINDOW_H);
   renderXCenteredText(font42, "GAME OVER", textY - 42 * 2);
   renderXCenteredText(font28, pts, textY + 4 * 28);
   SDL_SetRenderTarget(gRenderer, canvas);
@@ -735,15 +731,19 @@ int setRank() {
 
   player.points = gPoints;
 
-  pRankFile = fopen("records.bin", "r+");
-  if (!pRankFile) {
-    perror("Could not open the rankings file! Error: ");
-    gQuit = 1;
-  } else {
-    fread(records, sizeof(PLAYER), 5, pRankFile);
+  if(file == 0) {
+    file = fopen("records.bin", "wb");
+    if (player.points) {
+      records[0] = player;
+    }
+  }
+  else {
+    fread(records, sizeof(RECORD), 5, file);
+    fclose(file);
+    file = fopen("records.bin", "wb");
     /* Searches for values in the top 5 ranks that are lower than the
-       the new player score. */
-    if (records[4].points < player.points) {
+     the new player score. */
+    if (player.points > records[4].points) {
       records[4] = player;
       for (i = 4; i > 0; i--) {
         if (records[i].points > records[i - 1].points) {
@@ -752,20 +752,11 @@ int setRank() {
           records[i - 1] = aux;
         }
       }
-      fclose(pRankFile);
-      pRankFile = fopen("records.bin", "wb");
-      if (!pRankFile) {
-        perror("Ranking file could not be replaced! Error: ");
-        gQuit = 1;
-      } else {
-        fwrite(records, sizeof(PLAYER), 5, pRankFile);
-        fclose(pRankFile);
-        return 1;
-      }
-    } else
-      return 0;
+    }
   }
-  return 1;
+  
+  fwrite(records, sizeof(RECORD), 5, file);
+  fclose(file);
 }
 
 void closing() {
@@ -805,7 +796,7 @@ void closing() {
 }
 
 void updateMenuTexture() {
-  btnsText = createEmptySprite(WINDOW_W, WINDOW_H);
+  btnsText = createEmptySprite(SPRITE_W, WINDOW_H);
   if (gSoundCondition) {
     SDL_RenderCopy(gRenderer, sndOnText, NULL, NULL);
   }
@@ -876,7 +867,6 @@ SDL_Point getRulerCorners(int pvtX, int pvtY, int ox, int oy) {
 void reset() {
   int i, j;
   int randomColumn = rand() % 6;
-  quantBlocks = 0;
   hero = (OBJECT){-HITAREA_W - 45, WINDOW_H / 2 - HERO_W / 2, 0, 0};
   //gameFrame = RESET_FRAME;
   characterFrame = 0;
@@ -943,7 +933,7 @@ void handleButtons() {
         if (clickButton(e, dstPauseButton)) {
           gPausedGame = 1;
           if (gMusicCondition) {
-            Mix_PauseMusic();
+            Mix_Pause(1);
           }
           break;
         }
@@ -1016,8 +1006,8 @@ void tick() {
   int i, j;
   bubbleDstRect = (SDL_Rect){0, hero.posY - HAND_H, WINDOW_W, WINDOW_H};
 
-  //SDL_RenderClear(gRenderer);
-  canvas = createEmptySprite(WINDOW_W + 1, WINDOW_H);
+  SDL_RenderClear(gRenderer);
+  canvas = createEmptySprite(WINDOW_W, WINDOW_H);
   SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg1);
   SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg2);
 
@@ -1117,7 +1107,7 @@ void tick() {
         for (ii = 0; ii < bulletsLoaded; ii++) {
           bulletsInTheMagazine += moveObject(&bullets[ii]);
           if (bullets[ii].posX > 0) {
-            collide(&bullets[ii], &quantBlocks);
+            collide(&bullets[ii]);
             bulletRect.x = bullets[ii].posX;
             bulletRect.y = bullets[ii].posY;
             SDL_RenderFillRect(gRenderer, &bulletRect);
@@ -1167,7 +1157,6 @@ void tick() {
             for (j = 0; j < enemyInColumn; j++) {
               hitAreaY = rand() % 6;
               block[i - 1][hitAreaY] = createEnemy(HITAREA_W * i, ENEMY_H * hitAreaY);
-              quantBlocks++;
             }
           }
         }
@@ -1283,14 +1272,12 @@ void loop() {
 #endif
 }
 
-int main(int argc, char const *argv[]) {
+int main() {
   /* Start up SDL and create window */
-  srand(time(NULL));
   if (!init()) {
     printf("SDL could not be initialized\n");
   } else {
     loadMedia();
-    gQuit = 0;
     reset();
     loop();
   }
