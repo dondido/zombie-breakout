@@ -604,7 +604,7 @@ Mix_Chunk *loadWAV(const char *filepath) {
 
 void loadMedia() {
   /* Load menu surface */
-  mainMenu = loadTexture("assets/images/menu-11-menu.png");
+  mainMenu = loadTexture("./assets/images/menu-11-menu.png");
   gameTitle = loadTexture("assets/images/menu-11-title.png");
   pauseButton = loadTexture("assets/images/menu-11-pause.png");
   sndOnText = loadTexture("assets/images/menu-11-sound-on.png");
@@ -672,10 +672,20 @@ void showHelp() {
   SDL_SetRenderTarget(gRenderer, canvas);
 }
 
+void syncRecords() {
+  #if __EMSCRIPTEN__
+  EM_ASM(
+    FS.syncfs(false, function() {
+      Module.print("File sync complete.")
+    });
+  );
+  #endif
+}
+
 void listRecords() {
   int i;
   RECORD records[5];
-  FILE *file = fopen("records.bin","rb");
+  FILE *file = fopen("IDBFS/records.bin","rb");
   int empty = 1;
   char entry[50];
   char digits[7];
@@ -685,8 +695,10 @@ void listRecords() {
   renderXCenteredText(font42, "TOP RANKINGS", textY - 42 * 2);
 
   if(file) {
+    printf("%s\n", "File read!");
     fread(records, sizeof(RECORD), 5, file);
     for (i = 0; i < 5; i++) {
+      printf("%d %d %s\n", i, records[i].points, records[i].name);
       if (records[i].points > 0) {
         empty = 0;
         strcpy(entry, records[i].name);
@@ -698,6 +710,7 @@ void listRecords() {
       }
     }
     fclose(file);
+    syncRecords();
   }
 
   if (empty) {
@@ -707,7 +720,7 @@ void listRecords() {
 }
 
 void setRank() {
-  FILE *file = fopen("records.bin", "rb");
+  FILE *file = fopen("IDBFS/records.bin", "rb");
   RECORD player;
   RECORD records[5];
   RECORD aux;
@@ -732,15 +745,18 @@ void setRank() {
   player.points = gPoints;
 
   if(file == 0) {
-    file = fopen("records.bin", "wb");
+    file = fopen("IDBFS/records.bin", "wb");
     if (player.points) {
       records[0] = player;
+      for (i = 1; i < 5; i++) {
+        records[i] = (RECORD){0};
+      }
     }
   }
   else {
     fread(records, sizeof(RECORD), 5, file);
     fclose(file);
-    file = fopen("records.bin", "wb");
+    file = fopen("IDBFS/records.bin", "wb");
     /* Searches for values in the top 5 ranks that are lower than the
      the new player score. */
     if (player.points > records[4].points) {
@@ -757,42 +773,7 @@ void setRank() {
   
   fwrite(records, sizeof(RECORD), 5, file);
   fclose(file);
-}
-
-void closing() {
-  // SDL_FreeSurface(mainMenu);
-  mainMenu = NULL;
-
-  /* Close font */
-  TTF_CloseFont(font20);
-  font20 = NULL;
-
-  /* Free bar image */
-  // SDL_FreeSurface(heroText);
-  heroText = NULL;
-
-  // SDL_FreeSurface(gScreenSurface);
-  // gScreenSurface = NULL;
-
-  /*Destroy window*/
-  SDL_DestroyRenderer(gRenderer);
-  SDL_DestroyWindow(gWindow);
-  gWindow = NULL;
-
-  /*Free sounds */
-  Mix_FreeChunk(hitSound);
-  Mix_FreeChunk(destroySound);
-  Mix_FreeChunk(gameMusic);
-
-  // Close the font that was used
-  TTF_CloseFont(font20);
-  TTF_CloseFont(font28);
-  TTF_CloseFont(font42);
-
-  /*Quit SDL subsystems*/
-  TTF_Quit();
-  IMG_Quit();
-  SDL_Quit();
+  syncRecords();
 }
 
 void updateMenuTexture() {
@@ -1262,6 +1243,21 @@ void tick() {
 
 void loop() {
 #if __EMSCRIPTEN__
+  EM_ASM(
+    FS.mkdir('IDBFS');
+    FS.mount(IDBFS, {}, 'IDBFS');
+
+    //populate persistent_data directory with existing persistent source data 
+    //stored with Indexed Db
+    //first parameter = "true" mean synchronize from Indexed Db to 
+    //Emscripten file system,
+    // "false" mean synchronize from Emscripten file system to Indexed Db
+    //second parameter = function called when data are synchronized
+    FS.syncfs(true, function() {
+      Module.print("IDBFS initialized.");
+    });
+  );
+
   emscripten_set_main_loop(tick, 0, 1);
 #else
   /* Starts game main loop */
@@ -1281,6 +1277,5 @@ int main() {
     reset();
     loop();
   }
-  closing();
   return 0;
 }
