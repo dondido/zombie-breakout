@@ -92,12 +92,13 @@ int aim = 0;
 int mouseX = 0;
 int mouseY = 0;
 double degrees = 0;
-
 double radians = 0;
 double bulletX = 0;
 double bulletY = 0;
 double sinRadians = 0;
 double cosRadians = 0;
+int numFrames = 0;
+int startTime = 0;
 /* The window we'll be rendering to */
 SDL_Event e;
 SDL_Rect ptsDstRect;
@@ -644,6 +645,7 @@ void loadMedia() {
   font42 = TTF_OpenFont("assets/images/visitor1.ttf", 42);
 
   createExtraBulletSprite(ENEMY_W * 4, ENEMY_H);
+  canvas = createEmptySprite(WINDOW_W, WINDOW_H);
 }
 
 void renderXCenteredText(TTF_Font *font, char string[], int y) {
@@ -695,10 +697,8 @@ void listRecords() {
   renderXCenteredText(font42, "TOP RANKINGS", textY - 42 * 2);
 
   if(file) {
-    printf("%s\n", "File read!");
     fread(records, sizeof(RECORD), 5, file);
     for (i = 0; i < 5; i++) {
-      printf("%d %d %s\n", i, records[i].points, records[i].name);
       if (records[i].points > 0) {
         empty = 0;
         strcpy(entry, records[i].name);
@@ -980,15 +980,27 @@ void handleButtons() {
       }
       break;
   }
-
 }
+
+void printFps() {
+  int elapsedMS = SDL_GetTicks() - startTime; // Time since start of loop
+  ++numFrames;
+  if (elapsedMS) { // Skip this the first frame
+    double elapsedSeconds = elapsedMS / 1000.0; // Convert to seconds
+    double fps = numFrames / elapsedSeconds; // FPS is Frames / Seconds
+    printf("%s %f\n", "Frame rate: ", fps);
+  }
+}
+
 
 void tick() {
   int i, j;
   bubbleDstRect = (SDL_Rect){0, hero.posY - HAND_H, WINDOW_W, WINDOW_H};
 
+  printFps();
+
   SDL_RenderClear(gRenderer);
-  canvas = createEmptySprite(WINDOW_W, WINDOW_H);
+  SDL_SetRenderTarget(gRenderer, canvas);
   SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg1);
   SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg2);
 
@@ -1238,10 +1250,11 @@ void tick() {
   SDL_RenderCopy(gRenderer, canvas, NULL, NULL);
   
   SDL_RenderPresent(gRenderer);
-  SDL_DestroyTexture(canvas);
+  //SDL_DestroyTexture(canvas);
 }
 
 void loop() {
+  startTime = SDL_GetTicks();
 #if __EMSCRIPTEN__
   EM_ASM(
     FS.mkdir('IDBFS');
