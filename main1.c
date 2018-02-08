@@ -47,7 +47,7 @@
 #define SPRITE_W WINDOW_W - 1
 #define RESET_FRAME -HITAREA_W * 3
 #define ENEMY_OFFSET HITAREA_W - HITAREA_X
-#define FIELD_X WINDOW_W - BULLET_SIDE * 2
+#define FIELD_X WINDOW_W - 12
 #define STEP_Y 3
 
 typedef struct _TEXT_TEXTURE {
@@ -454,7 +454,34 @@ void createExtraBulletSprite(int w, int h) {
   SDL_SetRenderTarget(gRenderer, canvas);
 }
 
-ENEMY createEnemy(int posX, int posY) {
+ENEMY initEnemy() {
+  ENEMY block = {0, 0, 0, 0, 0, ""};
+  block.txtDstRect = (SDL_Rect){0, 0, 0, 0};
+  setZombieTextTexture(&block);
+  block.sprite = createEmptySprite(ENEMY_W * 4, ENEMY_H);
+  return block;
+}
+
+void spawnEnemy(ENEMY *block, int posX, int posY) {
+  /*typedef struct _ENEMY {
+    int time;
+    int frame;
+    int posX;
+    int posY;
+    int resistance;
+    char lifeLabel[3];
+    SDL_Texture *textTexture;
+    SDL_Texture *sprite;
+    SDL_Rect txtDstRect;
+  } ENEMY;*/
+  /* Declaring the surface. */
+  //SDL_Surface *s;
+
+  /* Creating the surface. */
+  //s = SDL_CreateRGBSurface(0, ENEMY_W * 4, ENEMY_H, 32, 0, 0, 0, 0);
+  printf("%s\n", "Spawn");
+  /* Filling the surface with red color. */
+  //SDL_FillRect(s, NULL, SDL_MapRGB(s->format, 255, 0, 0));
   int hairSpriteY = ENEMY_H * (rand() % 5);
   int hairColour = rand() % 7;
   int hairSpriteX = ENEMY_W * hairColour;
@@ -463,14 +490,21 @@ ENEMY createEnemy(int posX, int posY) {
   int eyesSpriteX = ENEMY_W * (rand() % 4);
   int blinkSpriteX = ENEMY_W * 4;
   int mouthSpriteX = ENEMY_W * (rand() % 6);
-
   int armsSpriteX = 2;
-  ENEMY block = {1, 0, posX, posY, level + (rand() % 3) * 10 * (level / 10)};
+  //ENEMY block = {1, 0, posX, posY, level + (rand() % 3) * 10 * (level / 10)};
+  block->time = 1;
+  block->posY = posY;
+  block->posX = posX;
+  block->resistance = level + (rand() % 3) * 10 * (level / 10);
 
-  block.txtDstRect = (SDL_Rect){0, posY + ENEMY_H - 24, 0, 0};
-  setZombieTextTexture(&block);
-  block.sprite = createEmptySprite(ENEMY_W * 4, ENEMY_H);
+  block->txtDstRect = (SDL_Rect){0, posY + ENEMY_H - 24, 0, 0};
+  setZombieTextTexture(block);
 
+  SDL_SetRenderTarget(gRenderer, block->sprite);
+  //SDL_SetRenderDrawBlendMode(gRenderer, SDL_BLENDMODE_BLEND);
+  SDL_SetRenderDrawColor(gRenderer, 0, 0, 0, 0);
+  //SDL_RenderFillRect(gRenderer, NULL);
+  //SDL_SetRenderDrawBlendMode(gRenderer, SDL_BLENDMODE_NONE);
   drawSprite(0, 0, 0, eyesSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
   drawSprite(ENEMY_W, 3, armsSpriteX, eyesSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
   drawSprite(ENEMY_W * 2, 3, 0, blinkSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
@@ -478,7 +512,6 @@ ENEMY createEnemy(int posX, int posY) {
   SDL_RenderCopy(gRenderer, extraBulletText, NULL, NULL);
 
   SDL_SetRenderTarget(gRenderer, canvas);
-  return block;
 }
 
 int moveObject(OBJECT *p) {
@@ -877,15 +910,17 @@ void reset() {
   updateMenuTexture();
   updateBullets(1);
 
-  for (i = 0; i < ROWS - 1; i++) {
+  for (i = 0; i < ROWS; i++) {
     for (j = 0; j < COLUMNS; j++) {
-      block[i][j] = (ENEMY){0};
+      block[i][j] = initEnemy();
     }
   }
   for (j = 0; j < COLUMNS; j++) {
-    block[i][j] = rand() % 5 == 0 ? createEnemy(HITAREA_W * ROWS, ENEMY_H * j) : (ENEMY){0};
+    if(rand() % 5 == 0) {
+      spawnEnemy(&block[i - 1][j], HITAREA_W * ROWS, ENEMY_H * j);
+    }
   }
-  block[i][randomColumn] = createEnemy(HITAREA_W * ROWS, ENEMY_H * randomColumn);
+  spawnEnemy(&block[i - 1][randomColumn], HITAREA_W * ROWS, ENEMY_H * randomColumn);
 }
 
 void interpolate() {
@@ -1058,7 +1093,8 @@ void tick() {
       else if (block[i][j].time == -1) {
         SDL_DestroyTexture(block[i][j].textTexture);
         SDL_DestroyTexture(block[i][j].sprite);
-        block[i][j] = (ENEMY){0};
+        block[i][j].time = 0;
+        //block[i][j] = (ENEMY){0};
       }
     }
   }
@@ -1113,12 +1149,7 @@ void tick() {
           for (j = 0; j < COLUMNS; j++) {
             if (block[2][j].resistance) {
               gameFrame = -1000;
-              #if __EMSCRIPTEN__
-                Mix_HaltChannel(-1);
-              #else
-                Mix_FadeOutChannel(1, 1000 * 2);
-              #endif
-              
+              Mix_FadeOutChannel(1, 1000 * 2);
               setRank();
               break;
             };
@@ -1149,12 +1180,12 @@ void tick() {
             }
             level++;
             for (j = 0; j < COLUMNS; j++) {
-              block[i - 1][j] = (ENEMY){0};
+              block[i - 1][j].time = 0;
             }
             enemyInColumn = rand() % 5 + 1;
             for (j = 0; j < enemyInColumn; j++) {
               hitAreaY = rand() % 6;
-              block[i - 1][hitAreaY] = createEnemy(HITAREA_W * i, ENEMY_H * hitAreaY);
+              spawnEnemy(&block[i - 1][hitAreaY], HITAREA_W * i, ENEMY_H * hitAreaY);
             }
           }
         }
@@ -1276,7 +1307,7 @@ void loop() {
     });
   );
 
-  emscripten_set_main_loop(tick, 0, 0);
+  emscripten_set_main_loop(tick, 0, 1);
 #else
   /* Starts game main loop */
   while (!gQuit) {
