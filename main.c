@@ -171,6 +171,7 @@ SDL_Rect dstBg2 = {BG_W, 0, BG_W, WINDOW_H};
 SDL_Rect bubbleDstRect = {0, 0, WINDOW_W, WINDOW_H};
 
 int ii, hitAreaY;
+int walk = 0;
 int bulletIconY = WINDOW_H - MARGIN * 3 + BULLET_S / 2;
 int gameFrame = RESET_FRAME;
 int characterFrame = 0;
@@ -909,25 +910,17 @@ void handleButtons() {
           }
           break;
         }
-        if (mouseX < 120 && (gameFrame == shotInterval || gameFrame < 2)) {
-          gHeroNewY = mouseY - HERO_HAND_Y;
-          hero.stepY = gHeroNewY > hero.posY ? STEP_Y : -STEP_Y;
-
-          characterTime = 1;
-          characterFrame = 2;
-          break;
-        }
-        if (gameFrame == 1 || gameFrame == 0) {
-          setAngle();
+        if (gameFrame == shotInterval || gameFrame < 3) {
           isMouseDown = 1;
-          gameFrame = 2;
+          walk = 1;
         }
       }
       break;
     case SDL_MOUSEBUTTONUP:
       if (gPausedGame == 0 && hasGameStarted) {
-        if (mouseX < 110 && (gameFrame == 2 || gameFrame == 0)) {
-          gameFrame = 1;
+        if(walk) {
+          gHeroNewY = mouseY - HERO_HAND_Y;
+          hero.stepY = gHeroNewY > hero.posY ? STEP_Y : -STEP_Y;
         }
         isMouseDown = 0;
         break;
@@ -965,9 +958,13 @@ void handleButtons() {
       }
       break;
     case SDL_MOUSEMOTION:
-      if (isMouseDown == 1) {
+      if (isMouseDown && gameFrame > -1 && gameFrame < 3) {
+        gameFrame = 2;
         interpolate();
         setAngle();
+        if(aim) {
+          walk = 0;
+        }
       }
       break;
   }
@@ -983,12 +980,11 @@ void printFps() {
   }
 }
 
-
 void tick() {
   int i, j;
   bubbleDstRect = (SDL_Rect){0, hero.posY - HAND_H, WINDOW_W, WINDOW_H};
 
-  printFps();
+  //printFps();
 
   SDL_RenderClear(gRenderer);
   SDL_SetRenderTarget(gRenderer, canvas);
@@ -1057,7 +1053,7 @@ void tick() {
   if (gPausedGame == 0) {
     if (hero.stepY != 0 && fabs(gHeroNewY - hero.posY) <= STEP_Y) {
       hero.posY = gHeroNewY;
-      hero.stepY = 0;
+      walk = hero.stepY = 0;
     }
     if (gameFrame > 0) {
       if (gameFrame == 2) {
