@@ -165,7 +165,7 @@ OBJECT bullets[200];
 SDL_Point handPnt = {0, HAND_H / 2};
 SDL_Rect handDstRect = {0, 0, HAND_W, HAND_H};
 SDL_Rect bulletRect = {0, 0, BULLET_S, BULLET_S};
-SDL_Rect warningDstRect = {0, 81, HITAREA_W, WINDOW_H};
+SDL_Rect warningDstRects[COLUMNS];
 SDL_Rect dstBg1 = {0, 0, BG_W, WINDOW_H};
 SDL_Rect dstBg2 = {BG_W, 0, BG_W, WINDOW_H};
 SDL_Rect bubbleDstRect = {0, 0, WINDOW_W, WINDOW_H};
@@ -848,7 +848,7 @@ void reset() {
 
   gPoints = 0;
   
-
+  firstRow = 0;
   level = 1;
   bulletsLoaded = 1;
   killedInColumn = 0;
@@ -982,6 +982,7 @@ void printFps() {
 
 void tick() {
   int i, j;
+  ENEMY enemy;
   bubbleDstRect = (SDL_Rect){0, hero.posY - HAND_H, WINDOW_W, WINDOW_H};
 
   //printFps();
@@ -997,38 +998,52 @@ void tick() {
   }
 
   if(firstRow) {
-    if(gameFrame < 0) {
-      warningDstRect.x -=3;
+    for (j = 0; j < COLUMNS; j++) {
+      enemy = block[firstRow][j];
+      warningDstRects[j] = enemy.resistance > 0 ? (SDL_Rect){enemy.posX + HITAREA_W, enemy.posY + 80, HITAREA_W, 20} : (SDL_Rect){0};
     }
     if(warningFrame == 93) {
-      warningAlpha = 15;
+      warningAlpha = 20;
     }
     else if(warningFrame == 3 || warningFrame == 90) {
-      warningAlpha = 30;
+      warningAlpha = 40;
     }
     else if(warningFrame == 6 || warningFrame == 87) {
-      warningAlpha = 45;
-    }
-    else if(warningFrame == 9 || warningFrame == 84) {
       warningAlpha = 60;
     }
+    else if(warningFrame == 9 || warningFrame == 84) {
+      warningAlpha = 80;
+    }
     else if(warningFrame == 12 || warningFrame == 81) {
-      warningAlpha = 75;
+      warningAlpha = 100;
     }
     else if(warningFrame == 15) {
-      warningAlpha = 90;
+      warningAlpha = 120;
     }
     
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, warningAlpha);
-    SDL_RenderFillRect(renderer, &warningDstRect);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);   
+
+    if(gameFrame > RESET_FRAME) {
+      if(firstRow == 2) {
+        SDL_SetRenderDrawColor(renderer, 255, 153, 0, warningAlpha);
+        SDL_RenderCopy(renderer, stopBubble, NULL, &bubbleDstRect);
+      }
+      else {
+        SDL_SetRenderDrawColor(renderer, 255, 255, 0, warningAlpha);
+        SDL_RenderCopy(renderer, warningBubble, NULL, &bubbleDstRect);
+      }
+      if(warningFrame == 96) {
+        firstRow = warningFrame = 0;
+      }
+    }
+    else {
+      SDL_SetRenderDrawColor(renderer, 255, 0, 0, warningAlpha);
+    }
+
+    SDL_RenderFillRects(renderer, warningDstRects, COLUMNS);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-    SDL_RenderCopy(renderer, firstRow == 3 ? stopBubble : warningBubble, NULL, &bubbleDstRect);
 
     warningFrame ++;
-    if(warningFrame == 96) {
-      firstRow = warningFrame = 0;
-    }
   }
 
   SDL_SetRenderDrawColor(renderer, 0xFF, 0x00, 0xFF, 255);
@@ -1100,12 +1115,12 @@ void tick() {
           for (j = 0; j < COLUMNS; j++) {
             if (block[2][j].resistance) {
               gameFrame = -999;
+              firstRow = 2;
               #if __EMSCRIPTEN__
                 Mix_HaltChannel(-1);
               #else
                 Mix_FadeOutChannel(1, 999 * 2);
               #endif
-              
               setRank();
               break;
             };
@@ -1128,8 +1143,7 @@ void tick() {
                 bulletsLoaded++;
               }
               if(firstRow == 0 && killedInColumn != COLUMNS && i < 5){
-                firstRow = i;
-                warningDstRect.x = (i + 1) * HITAREA_W - 9;
+                firstRow = i - 1;
               }
               killedInColumn = 0;
               lastKilled = 0;
