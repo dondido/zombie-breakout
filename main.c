@@ -128,8 +128,8 @@ SDL_Texture *zombieMouth;
 SDL_Texture *zombieTorso;
 SDL_Texture *stageBackground;
 SDL_Texture *warningBubble;
-SDL_Texture *stopBubble;
-SDL_Texture *dangerBubble;
+SDL_Texture *skullBubble;
+SDL_Texture *runBubble;
 /* bar's surface */
 SDL_Texture *heroText;
 SDL_Texture *extraBulletText;
@@ -206,7 +206,7 @@ void drawCharacter() {
   }
   if (gameFrame < RESET_FRAME) {
     SDL_RenderCopyEx(renderer, heroText, &srcRect, &dstRect, 0, NULL, SDL_FLIP_HORIZONTAL);
-    SDL_RenderCopyEx(renderer, dangerBubble, NULL, &bubbleDstRect, 0, NULL, SDL_FLIP_HORIZONTAL);
+    SDL_RenderCopyEx(renderer, runBubble, NULL, &bubbleDstRect, 0, NULL, SDL_FLIP_HORIZONTAL);
   } else {
     SDL_RenderCopy(renderer, heroText, &srcRect, &dstRect);
   }
@@ -610,9 +610,9 @@ void loadMedia() {
   /* load bar surface */
   heroText = loadTexture("assets/images/character-8.png");
   gHandSurface = loadTexture("assets/images/character-hand-2.png");
-  warningBubble = loadTexture("assets/images/distanse-2.png");
-  stopBubble = loadTexture("assets/images/stop-2.png");
-  dangerBubble = loadTexture("assets/images/danger-2.png");
+  warningBubble = loadTexture("assets/images/warning-3.png");
+  skullBubble = loadTexture("assets/images/danger-3.png");
+  runBubble = loadTexture("assets/images/run-3.png");
 
   stageBackground = loadTexture("assets/images/zombie-grid-3.png");
 
@@ -849,6 +849,7 @@ void reset() {
   gPoints = 0;
   
   firstRow = 0;
+  warningFrame = 0;
   level = 1;
   bulletsLoaded = 1;
   killedInColumn = 0;
@@ -983,7 +984,7 @@ void printFps() {
 void tick() {
   int i, j;
   ENEMY enemy;
-  bubbleDstRect = (SDL_Rect){0, hero.posY - HAND_H, WINDOW_W, WINDOW_H};
+  bubbleDstRect = (SDL_Rect){0, hero.posY, WINDOW_W, WINDOW_H};
 
   //printFps();
 
@@ -1026,7 +1027,7 @@ void tick() {
     if(gameFrame > RESET_FRAME) {
       if(firstRow == 2) {
         SDL_SetRenderDrawColor(renderer, 255, 153, 0, warningAlpha);
-        SDL_RenderCopy(renderer, stopBubble, NULL, &bubbleDstRect);
+        SDL_RenderCopy(renderer, skullBubble, NULL, &bubbleDstRect);
       }
       else {
         SDL_SetRenderDrawColor(renderer, 255, 255, 0, warningAlpha);
