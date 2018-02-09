@@ -64,7 +64,7 @@ typedef struct _ENEMY {
   int posX;
   int posY;
   int resistance;
-  char lifeLabel[3];
+  char lifeLabel[6];
   SDL_Texture *textTexture;
   SDL_Texture *sprite;
   SDL_Rect txtDstRect;
@@ -105,9 +105,9 @@ SDL_Rect dstMusicButton;
 SDL_Rect srcMusicButton;
 SDL_Rect dstSoundButton;
 SDL_Rect srcSoundButton;
-SDL_Window *gWindow = NULL;
+SDL_Window *window = NULL;
 // The window renderer
-SDL_Renderer *gRenderer = NULL;
+SDL_Renderer *renderer = NULL;
 /* The surface contained by the window */
 /* The surface we'll be displaying the menu */
 SDL_Texture *mainMenu;
@@ -205,10 +205,10 @@ void drawCharacter() {
     characterTime += 3;
   }
   if (gameFrame < RESET_FRAME) {
-    SDL_RenderCopyEx(gRenderer, heroText, &srcRect, &dstRect, 0, NULL, SDL_FLIP_HORIZONTAL);
-    SDL_RenderCopyEx(gRenderer, dangerBubble, NULL, &bubbleDstRect, 0, NULL, SDL_FLIP_HORIZONTAL);
+    SDL_RenderCopyEx(renderer, heroText, &srcRect, &dstRect, 0, NULL, SDL_FLIP_HORIZONTAL);
+    SDL_RenderCopyEx(renderer, dangerBubble, NULL, &bubbleDstRect, 0, NULL, SDL_FLIP_HORIZONTAL);
   } else {
-    SDL_RenderCopy(gRenderer, heroText, &srcRect, &dstRect);
+    SDL_RenderCopy(renderer, heroText, &srcRect, &dstRect);
   }
 }
 
@@ -248,9 +248,9 @@ void drawEnemy(ENEMY *block) {
 
     block->time += 3;
   }
-  SDL_RenderCopy(gRenderer, block->sprite, &frame, &dstBlock);
+  SDL_RenderCopy(renderer, block->sprite, &frame, &dstBlock);
   if (block->frame != 3) {
-    SDL_RenderCopy(gRenderer, block->textTexture, NULL, &txtDstRect);
+    SDL_RenderCopy(renderer, block->textTexture, NULL, &txtDstRect);
   }
 }
 
@@ -259,7 +259,7 @@ void setTextTexture(TEXT_TEXTURE *txtText, TTF_Font *font, char *text) {
   SDL_Surface *textSurface = TTF_RenderText_Solid(font, text, textColor);
   SDL_DestroyTexture(txtText->txtText);
   // Create texture from surface pixels
-  txtText->txtText = SDL_CreateTextureFromSurface(gRenderer, textSurface);
+  txtText->txtText = SDL_CreateTextureFromSurface(renderer, textSurface);
   txtText->txtDstRect = (SDL_Rect){0, 0, textSurface->w, textSurface->h};
   // Get rid of the obsolete surface
   SDL_FreeSurface(textSurface);
@@ -289,7 +289,7 @@ void setZombieTextTexture(ENEMY *block) {
   block->txtDstRect.h = textSurface->h;
   block->txtDstRect.x = ENEMY_W + HITAREA_X - textSurface->w / 2;
   // Create texture from surface pixels
-  block->textTexture = SDL_CreateTextureFromSurface(gRenderer, textSurface);
+  block->textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
   // Get rid of the obsolete surface
   SDL_FreeSurface(textSurface);
 }
@@ -405,31 +405,31 @@ void drawSprite(int x, int y, int armsSpriteY, int eyesSpriteX, int mouthSpriteX
   SDL_Rect srcRect = {pantsSpriteX, 0, ENEMY_W, 92};
   SDL_Rect dstRect = (SDL_Rect){x + HITAREA_X, y + 86, HITAREA_W, 8};
   dstRect = (SDL_Rect){x, 0, ENEMY_W, 92};
-  SDL_RenderCopy(gRenderer, zombieLegs, &srcRect, &dstRect);
+  SDL_RenderCopy(renderer, zombieLegs, &srcRect, &dstRect);
   dstRect.y = y;
   srcRect.x = 0;
-  SDL_RenderCopy(gRenderer, zombieTorso, &srcRect, &dstRect);
+  SDL_RenderCopy(renderer, zombieTorso, &srcRect, &dstRect);
   srcRect.x = pantsSpriteX;
-  SDL_RenderCopy(gRenderer, zombiePants, &srcRect, &dstRect);
+  SDL_RenderCopy(renderer, zombiePants, &srcRect, &dstRect);
   srcRect.x = eyesSpriteX;
-  SDL_RenderCopy(gRenderer, zombieEyes, &srcRect, &dstRect);
+  SDL_RenderCopy(renderer, zombieEyes, &srcRect, &dstRect);
   srcRect.x = mouthSpriteX;
-  SDL_RenderCopy(gRenderer, zombieMouth, &srcRect, &dstRect);
+  SDL_RenderCopy(renderer, zombieMouth, &srcRect, &dstRect);
   dstRect.y += armsSpriteY;
   srcRect.x = 0;
-  SDL_RenderCopy(gRenderer, zombieArms, &srcRect, &dstRect);
+  SDL_RenderCopy(renderer, zombieArms, &srcRect, &dstRect);
   dstRect.y -= armsSpriteY;
   srcRect.x = browsSpriteX;
-  SDL_RenderCopy(gRenderer, zombieBrows, &srcRect, &dstRect);
+  SDL_RenderCopy(renderer, zombieBrows, &srcRect, &dstRect);
   srcRect.h = dstRect.h = 40;
   srcRect.x = hairSpriteX;
   srcRect.y = hairSpriteY;
-  SDL_RenderCopy(gRenderer, zombieHair, &srcRect, &dstRect);
+  SDL_RenderCopy(renderer, zombieHair, &srcRect, &dstRect);
 }
 
 SDL_Texture *createEmptySprite(int w, int h) {
-  SDL_Texture *texture = SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
-  SDL_SetRenderTarget(gRenderer, texture);
+  SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
+  SDL_SetRenderTarget(renderer, texture);
 
   // will make pixels with alpha 0 fully transparent
   // use SDL_SetTextureBlendMode . Not SDL_SetRenderDrawBlendMode
@@ -441,13 +441,13 @@ void createExtraBulletSprite(int w, int h) {
   SDL_Rect bulletRect = {ENEMY_W * 3 + HITAREA_X + BULLET_S, ENEMY_H / 2 + 4 + BULLET_S, BULLET_S, BULLET_S};
   extraBulletText = createEmptySprite(ENEMY_W * 4, ENEMY_H);
 
-  SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 255);
-  SDL_RenderFillRect(gRenderer, &bulletRect);
+  SDL_SetRenderDrawColor(renderer, 0xFF, 0x00, 0xFF, 255);
+  SDL_RenderFillRect(renderer, &bulletRect);
   setTextTexture(&txtText3, font20, "+1");
   txtText3.txtDstRect.x = ENEMY_W * 3 + BULLET_S * 4;
   txtText3.txtDstRect.y = ENEMY_H / 2 + BULLET_S;
-  SDL_RenderCopy(gRenderer, txtText3.txtText, NULL, &txtText3.txtDstRect);
-  SDL_SetRenderTarget(gRenderer, canvas);
+  SDL_RenderCopy(renderer, txtText3.txtText, NULL, &txtText3.txtDstRect);
+  SDL_SetRenderTarget(renderer, canvas);
 }
 
 ENEMY createEnemy(int posX, int posY) {
@@ -471,9 +471,9 @@ ENEMY createEnemy(int posX, int posY) {
   drawSprite(ENEMY_W, 3, armsSpriteX, eyesSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
   drawSprite(ENEMY_W * 2, 3, 0, blinkSpriteX, mouthSpriteX, hairSpriteX, hairSpriteY, browsSpriteX, pantsSpriteX);
 
-  SDL_RenderCopy(gRenderer, extraBulletText, NULL, NULL);
+  SDL_RenderCopy(renderer, extraBulletText, NULL, NULL);
 
-  SDL_SetRenderTarget(gRenderer, canvas);
+  SDL_SetRenderTarget(renderer, canvas);
   return block;
 }
 
@@ -525,14 +525,14 @@ int init() {
     success = 0;
   } else {
     /*Create window*/
-    gWindow = SDL_CreateWindow("Zombie Breakout", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_W, WINDOW_H, SDL_WINDOW_RESIZABLE);
-    if (gWindow == NULL) {
+    window = SDL_CreateWindow("Zombie Breakout", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_W, WINDOW_H, SDL_WINDOW_RESIZABLE);
+    if (window == NULL) {
       printf("Window could not be created! SDL Error: %s\n", SDL_GetError());
       success = 0;
     } else {
       // Create renderer for window
-      gRenderer = SDL_CreateRenderer(gWindow, -1, SDL_RENDERER_ACCELERATED);
-      if (gRenderer == NULL) {
+      renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+      if (renderer == NULL) {
         printf("Renderer could not be created! SDL Error: %s\n", SDL_GetError());
         success = 0;
       } else {
@@ -569,7 +569,7 @@ SDL_Texture *loadTexture(char *path) {
            IMG_GetError());
   } else {
     // Create texture from surface pixels
-    newTexture = SDL_CreateTextureFromSurface(gRenderer, loadedSurface);
+    newTexture = SDL_CreateTextureFromSurface(renderer, loadedSurface);
     if (newTexture == NULL) {
       printf("Unable to create texture from %s! SDL Error: %s\n", path,
              SDL_GetError());
@@ -648,7 +648,7 @@ void renderXCenteredText(TTF_Font *font, char string[], int y) {
   setTextTexture(&txtText3, font, string);
   txtText3.txtDstRect.x = (WINDOW_W - txtText3.txtDstRect.w) / 2;
   txtText3.txtDstRect.y = y;
-  SDL_RenderCopy(gRenderer, txtText3.txtText, NULL, &txtText3.txtDstRect);
+  SDL_RenderCopy(renderer, txtText3.txtText, NULL, &txtText3.txtDstRect);
 }
 
 void showMarket() {
@@ -656,7 +656,7 @@ void showMarket() {
   scrnText = createEmptySprite(SPRITE_W, WINDOW_H);
   renderXCenteredText(font42, "MARKET", textY - 42 * 2);
   renderXCenteredText(font28, "Market is currently closed!", textY + 4 * 28);
-  SDL_SetRenderTarget(gRenderer, canvas);
+  SDL_SetRenderTarget(renderer, canvas);
 }
 
 void showHelp() {
@@ -667,7 +667,7 @@ void showHelp() {
   renderXCenteredText(font28, "2. Tap and hold down to aim at the target.",  textY + 4 * 28);
   renderXCenteredText(font28, "3. Release to shoot.", textY + 6 * 28);
   renderXCenteredText(font28, "4. Defend the city against hordes of zombies.", textY + 8 * 28);
-  SDL_SetRenderTarget(gRenderer, canvas);
+  SDL_SetRenderTarget(renderer, canvas);
 }
 
 void syncRecords() {
@@ -708,7 +708,7 @@ void listRecords() {
   if (empty) {
     renderXCenteredText(font28, "No records found!", textY + 4 * 28);
   }
-  SDL_SetRenderTarget(gRenderer, canvas);
+  SDL_SetRenderTarget(renderer, canvas);
 }
 
 void setRank() {
@@ -727,7 +727,7 @@ void setRank() {
   scrnText = createEmptySprite(SPRITE_W, WINDOW_H);
   renderXCenteredText(font42, "GAME OVER", textY - 42 * 2);
   renderXCenteredText(font28, pts, textY + 4 * 28);
-  SDL_SetRenderTarget(gRenderer, canvas);
+  SDL_SetRenderTarget(renderer, canvas);
 
   gPausedGame = 0;
 
@@ -771,12 +771,12 @@ void setRank() {
 void updateMenuTexture() {
   btnsText = createEmptySprite(SPRITE_W, WINDOW_H);
   if (gSoundCondition) {
-    SDL_RenderCopy(gRenderer, sndOnText, NULL, NULL);
+    SDL_RenderCopy(renderer, sndOnText, NULL, NULL);
   }
   if (!gMusicCondition) {
-    SDL_RenderCopy(gRenderer, mscOffText, NULL, NULL);
+    SDL_RenderCopy(renderer, mscOffText, NULL, NULL);
   }
-  SDL_SetRenderTarget(gRenderer, canvas);
+  SDL_SetRenderTarget(renderer, canvas);
 }
 
 void switchSound() {
@@ -882,7 +882,7 @@ void reset() {
 
 void interpolate() {
   int w, h;
-  SDL_GetWindowSize(gWindow, &w, &h);
+  SDL_GetWindowSize(window, &w, &h);
   mouseX = (float)(WINDOW_W) / w * e.motion.x;
   mouseY = (float)(WINDOW_H) / h * e.motion.y;
 }
@@ -986,10 +986,10 @@ void tick() {
 
   //printFps();
 
-  SDL_RenderClear(gRenderer);
-  SDL_SetRenderTarget(gRenderer, canvas);
-  SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg1);
-  SDL_RenderCopy(gRenderer, stageBackground, NULL, &dstBg2);
+  SDL_RenderClear(renderer);
+  SDL_SetRenderTarget(renderer, canvas);
+  SDL_RenderCopy(renderer, stageBackground, NULL, &dstBg1);
+  SDL_RenderCopy(renderer, stageBackground, NULL, &dstBg2);
 
   /* verifies if any key have been pressed */
   while (SDL_PollEvent(&e) != 0) {
@@ -1019,11 +1019,11 @@ void tick() {
       warningAlpha = 90;
     }
     
-    SDL_SetRenderDrawBlendMode(gRenderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, warningAlpha);
-    SDL_RenderFillRect(gRenderer, &warningDstRect);
-    SDL_SetRenderDrawBlendMode(gRenderer, SDL_BLENDMODE_NONE);
-    SDL_RenderCopy(gRenderer, firstRow == 3 ? stopBubble : warningBubble, NULL, &bubbleDstRect);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, warningAlpha);
+    SDL_RenderFillRect(renderer, &warningDstRect);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    SDL_RenderCopy(renderer, firstRow == 3 ? stopBubble : warningBubble, NULL, &bubbleDstRect);
 
     warningFrame ++;
     if(warningFrame == 96) {
@@ -1031,7 +1031,7 @@ void tick() {
     }
   }
 
-  SDL_SetRenderDrawColor(gRenderer, 0xFF, 0x00, 0xFF, 255);
+  SDL_SetRenderDrawColor(renderer, 0xFF, 0x00, 0xFF, 255);
 
   for (j = 0; j < COLUMNS; j++) {
     for (i = 2; i < ROWS; i++) {
@@ -1061,8 +1061,8 @@ void tick() {
           // the coordinates of Y in world coordinates
           handPvtPntY = handDstRect.y + handDstRect.h / 2;
           aimPnt = getRulerCorners(handDstRect.x, handPvtPntY, handDstRect.w / 2, -2);
-          SDL_RenderDrawLine(gRenderer, aimPnt.x, aimPnt.y, mouseX, mouseY);
-          SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
+          SDL_RenderDrawLine(renderer, aimPnt.x, aimPnt.y, mouseX, mouseY);
+          SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 
           if (isMouseDown == 0) {
             gameFrame = 3;
@@ -1090,7 +1090,7 @@ void tick() {
             collide(&bullets[ii]);
             bulletRect.x = bullets[ii].posX;
             bulletRect.y = bullets[ii].posY;
-            SDL_RenderFillRect(gRenderer, &bulletRect);
+            SDL_RenderFillRect(renderer, &bulletRect);
           }
         }
       }
@@ -1205,41 +1205,41 @@ void tick() {
   handDstRect.y = hero.posY + 35;
 
   if (gameFrame < RESET_FRAME) {
-    SDL_RenderCopyEx(gRenderer, gHandSurface, NULL, &handDstRect, 0, &handPnt, SDL_FLIP_HORIZONTAL);
+    SDL_RenderCopyEx(renderer, gHandSurface, NULL, &handDstRect, 0, &handPnt, SDL_FLIP_HORIZONTAL);
   } else {
-    SDL_RenderCopyEx(gRenderer, gHandSurface, NULL, &handDstRect, degrees, &handPnt, SDL_FLIP_NONE);
+    SDL_RenderCopyEx(renderer, gHandSurface, NULL, &handDstRect, degrees, &handPnt, SDL_FLIP_NONE);
   }
 
   drawCharacter();
 
   if (scrnText) {
-    SDL_RenderCopy(gRenderer, scrnText, NULL, NULL);
+    SDL_RenderCopy(renderer, scrnText, NULL, NULL);
     if (gameFrame > RESET_FRAME) {
-      SDL_RenderCopy(gRenderer, mainMenu, NULL, NULL);
-      SDL_RenderCopy(gRenderer, btnsText, NULL, NULL);
+      SDL_RenderCopy(renderer, mainMenu, NULL, NULL);
+      SDL_RenderCopy(renderer, btnsText, NULL, NULL);
     }
   } else if (hasGameStarted == 0) {
-    SDL_RenderCopy(gRenderer, gameTitle, NULL, NULL);
-    SDL_RenderCopy(gRenderer, mainMenu, NULL, NULL);
-    SDL_RenderCopy(gRenderer, btnsText, NULL, NULL);
+    SDL_RenderCopy(renderer, gameTitle, NULL, NULL);
+    SDL_RenderCopy(renderer, mainMenu, NULL, NULL);
+    SDL_RenderCopy(renderer, btnsText, NULL, NULL);
   } else {
-    SDL_RenderCopy(gRenderer, txtText1.txtText, NULL, &txtText1.txtDstRect);
-    SDL_RenderCopy(gRenderer, txtText2.txtText, NULL, &txtText2.txtDstRect);
+    SDL_RenderCopy(renderer, txtText1.txtText, NULL, &txtText1.txtDstRect);
+    SDL_RenderCopy(renderer, txtText2.txtText, NULL, &txtText2.txtDstRect);
     bulletRect.x = MARGIN;
     bulletRect.y = bulletIconY;
-    SDL_RenderFillRect(gRenderer, &bulletRect);
+    SDL_RenderFillRect(renderer, &bulletRect);
     if (gPausedGame) {
-      SDL_RenderCopy(gRenderer, mainMenu, NULL, NULL);
-      SDL_RenderCopy(gRenderer, btnsText, NULL, NULL);
+      SDL_RenderCopy(renderer, mainMenu, NULL, NULL);
+      SDL_RenderCopy(renderer, btnsText, NULL, NULL);
     } else {
-      SDL_RenderCopy(gRenderer, pauseButton, NULL, NULL);
+      SDL_RenderCopy(renderer, pauseButton, NULL, NULL);
     }
   }
 
-  SDL_SetRenderTarget(gRenderer, NULL);
-  SDL_RenderCopy(gRenderer, canvas, NULL, NULL);
+  SDL_SetRenderTarget(renderer, NULL);
+  SDL_RenderCopy(renderer, canvas, NULL, NULL);
   
-  SDL_RenderPresent(gRenderer);
+  SDL_RenderPresent(renderer);
   //SDL_DestroyTexture(canvas);
 }
 
@@ -1271,6 +1271,17 @@ void loop() {
 #endif
 }
 
+void closing() {
+  //Destroy window
+  SDL_DestroyRenderer(renderer);
+  SDL_DestroyWindow(window);
+
+  //Quit SDL subsystems
+  TTF_Quit();
+  IMG_Quit();
+  SDL_Quit();
+}
+
 int main() {
   /* Start up SDL and create window */
   if (!init()) {
@@ -1280,5 +1291,6 @@ int main() {
     reset();
     loop();
   }
+  closing();
   return 0;
 }
