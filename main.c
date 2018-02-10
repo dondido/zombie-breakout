@@ -303,7 +303,6 @@ void playSound(Mix_Chunk* sound) {
 void reflectX(OBJECT *bullet, ENEMY *block, int movingRight) {
   bullet->stepX *= -1;
   bullet->posX = block->posX + (movingRight ? HITAREA_W - BULLET_S : HITAREA_W * 2);
-  gPausedGame = 1;
 }
 
 void reflectY(OBJECT *bullet, ENEMY *block, int movingBottom) {
@@ -671,6 +670,13 @@ void showHelp() {
   SDL_SetRenderTarget(renderer, canvas);
 }
 
+void showPaused() {
+  int textY = WINDOW_H / 4;
+  scrnText = createEmptySprite(SPRITE_W, WINDOW_H);
+  renderXCenteredText(font42, "Pause", textY - 42 * 2);
+  SDL_SetRenderTarget(renderer, canvas);
+}
+
 void syncRecords() {
   #if __EMSCRIPTEN__
   EM_ASM(
@@ -907,6 +913,7 @@ void handleButtons() {
       if (gPausedGame == 0 && hasGameStarted) {
         if (clickButton(e, dstPauseButton)) {
           gPausedGame = 1;
+          showPaused();
           if (gMusicCondition) {
             Mix_Pause(1);
           }
@@ -928,8 +935,13 @@ void handleButtons() {
         break;
       }
       if (clickButton(e, exitDstRect)) {
-        if (hasGameStarted == 0 && scrnText == NULL) {
-          gQuit = 1;
+        if (hasGameStarted == 0) {
+          if(scrnText) {
+            scrnText = NULL;
+          }
+          else {
+            gQuit = 1;
+          }
         } else if (hasGameStarted == 1 && gPausedGame) {
           gameFrame = -999;
           gPausedGame = 0;
@@ -1295,7 +1307,7 @@ void loop() {
 #endif
 }
 
-void closing() {
+void quit() {
   //Destroy window
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
@@ -1315,6 +1327,6 @@ int main() {
     reset();
     loop();
   }
-  closing();
+  quit();
   return 0;
 }
