@@ -170,7 +170,7 @@ SDL_Rect dstBg1 = {0, 0, BG_W, WINDOW_H};
 SDL_Rect dstBg2 = {BG_W, 0, BG_W, WINDOW_H};
 SDL_Rect bubbleDstRect = {0, 0, WINDOW_W, WINDOW_H};
 
-int ii, hitAreaY;
+int i, hitAreaY;
 int walk = 0;
 int bulletIconY = WINDOW_H - MARGIN * 3 + BULLET_S / 2;
 int gameFrame = RESET_FRAME;
@@ -294,20 +294,21 @@ void setZombieTextTexture(ENEMY *block) {
   SDL_FreeSurface(textSurface);
 }
 
-void reflectX(OBJECT *bullet) {
-  bullet->stepX *= -1;
-  bullet->posX += bullet->stepX;
-}
-
-void reflectY(OBJECT *bullet) {
-  bullet->stepY *= -1;
-  //bullet->posY += bullet->stepY;
-}
-
 void playSound(Mix_Chunk* sound) {
   if(gSoundCondition) {
     Mix_PlayChannel(-1, sound, 0);
   }
+}
+
+void reflectX(OBJECT *bullet, ENEMY *block, int movingRight) {
+  bullet->stepX *= -1;
+  bullet->posX = block->posX + (movingRight ? HITAREA_W - BULLET_S : HITAREA_W * 2);
+  gPausedGame = 1;
+}
+
+void reflectY(OBJECT *bullet, ENEMY *block, int movingBottom) {
+  bullet->stepY *= -1;
+  bullet->posY = movingBottom ? block->posY - BULLET_S : block->posY + ENEMY_H;
 }
 
 void damage(int row, int column) {
@@ -363,7 +364,7 @@ void collide(OBJECT *bullet) {
     }
     if (block[x1][top].resistance) {
       damage(x1, top);
-      reflectX(bullet);
+      reflectX(bullet, &block[x1][top], movingRight);
     }
   } else if (left == right) {
     if (movingBottom) {
@@ -371,7 +372,7 @@ void collide(OBJECT *bullet) {
     }
     if (block[left][y1].resistance) {
       damage(left, y1);
-      reflectY(bullet);
+      reflectY(bullet, &block[left][y1], movingBottom);
     }
   } else if (top != bottom && left != right) {
     if (movingRight) {
@@ -385,18 +386,18 @@ void collide(OBJECT *bullet) {
     if (block[x1][y1].resistance) {
       damage(x1, y1);
       if (block[x2][y1].resistance == 0 && block[x1][y2].resistance == 0) {
-        reflectX(bullet);
-        reflectY(bullet);
+        reflectX(bullet, &block[x1][y1], movingRight);
+        reflectY(bullet, &block[x1][y1], movingBottom);
         return;
       }
     }
     if (block[x2][y1].resistance) {
       damage(x2, y1);
-      reflectY(bullet);
+      reflectY(bullet, &block[x2][y1], movingBottom);
     }
     if (block[x1][y2].resistance) {
       damage(x1, y2);
-      reflectX(bullet);
+      reflectX(bullet, &block[x1][y2], movingRight);
     }
   }
 }
@@ -1100,13 +1101,10 @@ void tick() {
       }
 
       if (gameFrame > 2) {
-        for (ii = 0; ii < bulletsLoaded; ii++) {
-          bulletsInTheMagazine += moveObject(&bullets[ii]);
-          if (bullets[ii].posX > 0) {
-            collide(&bullets[ii]);
-            bulletRect.x = bullets[ii].posX;
-            bulletRect.y = bullets[ii].posY;
-            SDL_RenderFillRect(renderer, &bulletRect);
+        for (i = 0; i < bulletsLoaded; i++) {
+          bulletsInTheMagazine += moveObject(&bullets[i]);
+          if (bullets[i].posX > 0) {
+            collide(&bullets[i]);
           }
         }
       }
@@ -1183,7 +1181,10 @@ void tick() {
           dstBg1.x = dstBg2.x - BG_W;
         }
       }
-
+      else if(gameFrame == -600) {
+        gHeroNewY = WINDOW_H / 2;
+        hero.stepY = gHeroNewY > hero.posY ? 1 : -1;
+      }
       else if (gameFrame > -HITAREA_W - 1) {
         dstBg1.x-=3;
         dstBg2.x-=3;
@@ -1227,6 +1228,16 @@ void tick() {
 
   drawCharacter();
 
+  if (gameFrame > 2) {
+    for (i = 0; i < bulletsLoaded; i++) {
+      if (bullets[i].posX > 0) {
+        bulletRect.x = bullets[i].posX;
+        bulletRect.y = bullets[i].posY;
+        SDL_RenderFillRect(renderer, &bulletRect);
+      }
+    }
+  }
+
   if (scrnText) {
     SDL_RenderCopy(renderer, scrnText, NULL, NULL);
     if (gameFrame > RESET_FRAME) {
@@ -1253,9 +1264,7 @@ void tick() {
 
   SDL_SetRenderTarget(renderer, NULL);
   SDL_RenderCopy(renderer, canvas, NULL, NULL);
-  
   SDL_RenderPresent(renderer);
-  //SDL_DestroyTexture(canvas);
 }
 
 void loop() {
