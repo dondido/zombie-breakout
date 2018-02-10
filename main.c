@@ -908,6 +908,7 @@ void handleButtons() {
     case SDL_QUIT:
       gQuit = 1;
       break;
+    case SDL_FINGERDOWN:
     case SDL_MOUSEBUTTONDOWN:  // if the event is mouse click
       interpolate();
       if (gPausedGame == 0 && hasGameStarted) {
@@ -925,6 +926,7 @@ void handleButtons() {
         }
       }
       break;
+    case SDL_FINGERUP:
     case SDL_MOUSEBUTTONUP:
       if (gPausedGame == 0 && hasGameStarted) {
         if(walk) {
@@ -971,6 +973,7 @@ void handleButtons() {
         }
       }
       break;
+    case SDL_FINGERMOTION:
     case SDL_MOUSEMOTION:
       if (isMouseDown && gameFrame > -1 && gameFrame < 3) {
         gameFrame = 2;
