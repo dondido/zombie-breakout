@@ -1327,6 +1327,9 @@ int main() {
     reset();
     loop();
   }
-  quit();
+  #if !__EMSCRIPTEN__
+    quit();
+  #endif
+  
   return 0;
 }
