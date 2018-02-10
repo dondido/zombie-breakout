@@ -170,6 +170,14 @@ SDL_Rect dstBg1 = {0, 0, BG_W, WINDOW_H};
 SDL_Rect dstBg2 = {BG_W, 0, BG_W, WINDOW_H};
 SDL_Rect bubbleDstRect = {0, 0, WINDOW_W, WINDOW_H};
 
+SDL_Rect playDstRect = {WINDOW_W / 2 - 68 / 2, 446, 68, 68};
+SDL_Rect exitDstRect = {214, 463, BUTTON_S, BUTTON_S};
+SDL_Rect sndDstRect = {292, 463, BUTTON_S, BUTTON_S};
+SDL_Rect mscDstRect = {368, 463, BUTTON_S, BUTTON_S};
+SDL_Rect recordsDstRect = {548, 463, BUTTON_S, BUTTON_S};
+SDL_Rect marketDstRect = {624, 463, BUTTON_S, BUTTON_S};
+SDL_Rect helpDstRect = {700, 463, BUTTON_S, BUTTON_S};
+
 int i, hitAreaY;
 int walk = 0;
 int bulletIconY = WINDOW_H - MARGIN * 3 + BULLET_S / 2;
@@ -830,6 +838,12 @@ void setAngle() {
 
   bulletY = sinRadians * BULLET_SPEED;
   bulletX = cosRadians * BULLET_SPEED;
+
+  gameFrame = 2;
+
+  if(aim) {
+    walk = 0;
+  }
 }
 
 SDL_Point getRulerCorners(int pvtX, int pvtY, int ox, int oy) {
@@ -888,43 +902,50 @@ void reset() {
   block[i][randomColumn] = createEnemy(HITAREA_W * ROWS, ENEMY_H * randomColumn);
 }
 
-void interpolate() {
+void interpolateFinger() {
+  int w, h;
+  SDL_GetWindowSize(window, &w, &h);
+  mouseX = (float)(WINDOW_W) * e.tfinger.x;
+  mouseY = (float)(WINDOW_H) * e.tfinger.y;
+}
+
+void interpolateMouse() {
   int w, h;
   SDL_GetWindowSize(window, &w, &h);
   mouseX = (float)(WINDOW_W) / w * e.motion.x;
   mouseY = (float)(WINDOW_H) / h * e.motion.y;
+  printf("Finger %d %d\n", mouseX, mouseY);
+}
+
+void handleDown(){
+  if (gPausedGame == 0 && hasGameStarted) {
+    if (clickButton(e, dstPauseButton)) {
+      gPausedGame = 1;
+      showPaused();
+      if (gMusicCondition) {
+        Mix_Pause(1);
+      }
+    }
+    else if (gameFrame == shotInterval || gameFrame < 3) {
+      isMouseDown = 1;
+      walk = 1;
+    }
+  }
 }
 
 void handleButtons() {
-  SDL_Rect playDstRect = {WINDOW_W / 2 - 68 / 2, 446, 68, 68};
-  SDL_Rect exitDstRect = {214, 463, BUTTON_S, BUTTON_S};
-  SDL_Rect sndDstRect = {292, 463, BUTTON_S, BUTTON_S};
-  SDL_Rect mscDstRect = {368, 463, BUTTON_S, BUTTON_S};
-  SDL_Rect recordsDstRect = {548, 463, BUTTON_S, BUTTON_S};
-  SDL_Rect marketDstRect = {624, 463, BUTTON_S, BUTTON_S};
-  SDL_Rect helpDstRect = {700, 463, BUTTON_S, BUTTON_S};
 
   switch (e.type) {
     case SDL_QUIT:
       gQuit = 1;
       break;
     case SDL_FINGERDOWN:
+      interpolateFinger();
+      handleDown();
+      break;
     case SDL_MOUSEBUTTONDOWN:  // if the event is mouse click
-      interpolate();
-      if (gPausedGame == 0 && hasGameStarted) {
-        if (clickButton(e, dstPauseButton)) {
-          gPausedGame = 1;
-          showPaused();
-          if (gMusicCondition) {
-            Mix_Pause(1);
-          }
-          break;
-        }
-        if (gameFrame == shotInterval || gameFrame < 3) {
-          isMouseDown = 1;
-          walk = 1;
-        }
-      }
+      interpolateMouse();
+      handleDown();
       break;
     case SDL_FINGERUP:
     case SDL_MOUSEBUTTONUP:
@@ -974,14 +995,15 @@ void handleButtons() {
       }
       break;
     case SDL_FINGERMOTION:
+      if (isMouseDown && gameFrame > -1 && gameFrame < 3) {
+        interpolateFinger();
+        setAngle();
+      }
+      break;
     case SDL_MOUSEMOTION:
       if (isMouseDown && gameFrame > -1 && gameFrame < 3) {
-        gameFrame = 2;
-        interpolate();
+        interpolateMouse();
         setAngle();
-        if(aim) {
-          walk = 0;
-        }
       }
       break;
   }
