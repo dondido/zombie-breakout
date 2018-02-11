@@ -1,6 +1,8 @@
-# Zombie breakout
+# Zombie Breakout
 
 Sample C / Webassembly game.
+
+![Zombie breakout](zombie-breakout.gif)
 
 ## Compilation
 
