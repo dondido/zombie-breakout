@@ -471,7 +471,7 @@ ENEMY createEnemy(int posX, int posY) {
   int mouthSpriteX = ENEMY_W * (rand() % 6);
 
   int armsSpriteX = 2;
-  ENEMY block = {1, 0, posX, posY, level + (rand() % 3) * 10 * (level / 10)};
+  ENEMY block = {1, 0, posX, posY, level + (rand() % 4) * 8 * (level / 10)};
 
   block.txtDstRect = (SDL_Rect){0, posY + ENEMY_H - 24, 0, 0};
   setZombieTextTexture(&block);
