@@ -1,8 +1,12 @@
 # Zombie Breakout
 
-Sample C / Webassembly game.
+Native C game ported to WebAssembly.
 
 ![Zombie breakout](zombie-breakout.gif)
+
+## Demo
+
+Compiled with Emscripten to WASM: https://dondido.github.io/zombie-breakout/
 
 ## Compilation
 
@@ -24,9 +28,15 @@ Build the source as [shown in the MDN](https://developer.mozilla.org/en-US/docs/
 
 ### Compiling
 
-Compiling is rather easy:
+Compiling to native code:
 
 ```
 make clean
 make
+```
+
+Porting the game to Emscripten
+
+```
+make emcc
 ```
