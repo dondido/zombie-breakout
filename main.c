@@ -38,6 +38,7 @@
 #define HERO_H 91
 #define WINDOW_W 960
 #define WINDOW_H 540
+#define WINDOW_D sqrt(pow(WINDOW_W, 2) + pow(WINDOW_H, 2))
 #define BUTTON_S 52
 #define MARGIN 10
 #define SPRITE_W WINDOW_W - 1
@@ -72,10 +73,11 @@ typedef struct _ENEMY {
 
 typedef struct _RECORD {
   int points;
-  char name[25];
+  char name[30];
 } RECORD;
 
 int gQuit = 0;
+int mouseSupport = 1;
 int gPoints;
 char pointsText[10];
 char bulletsText[9];
@@ -734,7 +736,7 @@ void setRank() {
   int i = 0;
   int textY = WINDOW_H / 4;
   char pts[12] = "PTS: ";
-  char timeStr[25];
+  char timeStr[30];
   time_t t = time(NULL);
   struct tm *tm = localtime(&t);
 
@@ -907,6 +909,7 @@ void interpolateFinger() {
   SDL_GetWindowSize(window, &w, &h);
   mouseX = (float)(WINDOW_W) * e.tfinger.x;
   mouseY = (float)(WINDOW_H) * e.tfinger.y;
+  mouseSupport = 0;
 }
 
 void interpolateMouse() {
@@ -914,7 +917,6 @@ void interpolateMouse() {
   SDL_GetWindowSize(window, &w, &h);
   mouseX = (float)(WINDOW_W) / w * e.motion.x;
   mouseY = (float)(WINDOW_H) / h * e.motion.y;
-  printf("Finger %d %d\n", mouseX, mouseY);
 }
 
 void handleDown(){
@@ -933,6 +935,51 @@ void handleDown(){
   }
 }
 
+void handleMotion(){
+  if (gPausedGame == 0 && hasGameStarted) {
+    if(walk) {
+      gHeroNewY = mouseY - HERO_HAND_Y;
+      hero.stepY = gHeroNewY > hero.posY ? STEP_Y : -STEP_Y;
+    }
+    isMouseDown = 0;
+  }
+  else if (clickButton(e, exitDstRect)) {
+    if (hasGameStarted == 0) {
+      if(scrnText) {
+        scrnText = NULL;
+      }
+      else {
+        gQuit = 1;
+      }
+    } else if (hasGameStarted == 1 && gPausedGame) {
+      gameFrame = -999;
+      gPausedGame = 0;
+      setRank();
+    }
+  } else if (clickButton(e, playDstRect)) {
+    scrnText = NULL;
+    if (gPausedGame) {
+      gPausedGame = 0;
+      playMusic();
+    } else if (hasGameStarted == 0) {
+      hasGameStarted = 1;
+      playMusic();
+    }
+  } else if (hasGameStarted == 0 || (hasGameStarted == 1 && gPausedGame)) {
+    if (clickButton(e, recordsDstRect)) {
+      listRecords();
+    } else if (clickButton(e, marketDstRect)) {
+      showMarket();
+    } else if (clickButton(e, helpDstRect)) {
+      showHelp();
+    } else if (clickButton(e, sndDstRect)) {
+      switchSound();
+    } else if (clickButton(e, mscDstRect)) {
+      switchMusic();
+    }
+  }
+}
+
 void handleButtons() {
 
   switch (e.type) {
@@ -944,54 +991,17 @@ void handleButtons() {
       handleDown();
       break;
     case SDL_MOUSEBUTTONDOWN:  // if the event is mouse click
-      interpolateMouse();
-      handleDown();
+      if(mouseSupport) {
+        interpolateMouse();
+        handleDown();
+      }
       break;
     case SDL_FINGERUP:
+      handleMotion();
+      break;
     case SDL_MOUSEBUTTONUP:
-      if (gPausedGame == 0 && hasGameStarted) {
-        if(walk) {
-          gHeroNewY = mouseY - HERO_HAND_Y;
-          hero.stepY = gHeroNewY > hero.posY ? STEP_Y : -STEP_Y;
-        }
-        isMouseDown = 0;
-        break;
-      }
-      if (clickButton(e, exitDstRect)) {
-        if (hasGameStarted == 0) {
-          if(scrnText) {
-            scrnText = NULL;
-          }
-          else {
-            gQuit = 1;
-          }
-        } else if (hasGameStarted == 1 && gPausedGame) {
-          gameFrame = -999;
-          gPausedGame = 0;
-          setRank();
-        }
-        break;
-      } else if (clickButton(e, playDstRect)) {
-        scrnText = NULL;
-        if (gPausedGame) {
-          gPausedGame = 0;
-          playMusic();
-        } else if (hasGameStarted == 0) {
-          hasGameStarted = 1;
-          playMusic();
-        }
-      } else if (hasGameStarted == 0 || (hasGameStarted == 1 && gPausedGame)) {
-        if (clickButton(e, recordsDstRect)) {
-          listRecords();
-        } else if (clickButton(e, marketDstRect)) {
-          showMarket();
-        } else if (clickButton(e, helpDstRect)) {
-          showHelp();
-        } else if (clickButton(e, sndDstRect)) {
-          switchSound();
-        } else if (clickButton(e, mscDstRect)) {
-          switchMusic();
-        }
+      if(mouseSupport) {
+        handleMotion();
       }
       break;
     case SDL_FINGERMOTION:
@@ -1001,7 +1011,7 @@ void handleButtons() {
       }
       break;
     case SDL_MOUSEMOTION:
-      if (isMouseDown && gameFrame > -1 && gameFrame < 3) {
+      if (mouseSupport && isMouseDown && gameFrame > -1 && gameFrame < 3) {
         interpolateMouse();
         setAngle();
       }
@@ -1115,7 +1125,7 @@ void tick() {
           // the coordinates of Y in world coordinates
           handPvtPntY = handDstRect.y + handDstRect.h / 2;
           aimPnt = getRulerCorners(handDstRect.x, handPvtPntY, handDstRect.w / 2, -2);
-          SDL_RenderDrawLine(renderer, aimPnt.x, aimPnt.y, mouseX, mouseY);
+          SDL_RenderDrawLine(renderer, aimPnt.x, aimPnt.y, aimPnt.x + WINDOW_D * cosRadians, aimPnt.y + WINDOW_D * sinRadians);
           SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 
           if (isMouseDown == 0) {
@@ -1218,13 +1228,13 @@ void tick() {
           dstBg1.x = dstBg2.x - BG_W;
         }
       }
-      else if(gameFrame == -600) {
-        gHeroNewY = WINDOW_H / 2;
-        hero.stepY = gHeroNewY > hero.posY ? 1 : -1;
-      }
       else if (gameFrame > -HITAREA_W - 1) {
         dstBg1.x-=3;
         dstBg2.x-=3;
+        if(gameFrame == -600) {
+          gHeroNewY = WINDOW_H / 2;
+          hero.stepY = gHeroNewY > hero.posY ? 1 : -1;
+        }
         if (dstBg1.x < 0) {
           dstBg2.x = dstBg1.x + BG_W;
         }
@@ -1304,6 +1314,17 @@ void tick() {
   SDL_RenderPresent(renderer);
 }
 
+void quit() {
+  //Destroy window
+  SDL_DestroyRenderer(renderer);
+  SDL_DestroyWindow(window);
+
+  //Quit SDL subsystems
+  TTF_Quit();
+  IMG_Quit();
+  SDL_Quit();
+}
+
 void loop() {
   startTime = SDL_GetTicks();
 #if __EMSCRIPTEN__
@@ -1329,18 +1350,8 @@ void loop() {
     SDL_Delay(SDL_DELAY);
     tick();
   }
+  quit();
 #endif
-}
-
-void quit() {
-  //Destroy window
-  SDL_DestroyRenderer(renderer);
-  SDL_DestroyWindow(window);
-
-  //Quit SDL subsystems
-  TTF_Quit();
-  IMG_Quit();
-  SDL_Quit();
 }
 
 int main() {
@@ -1352,9 +1363,6 @@ int main() {
     reset();
     loop();
   }
-  #if !__EMSCRIPTEN__
-    quit();
-  #endif
   
   return 0;
 }
